@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hexsweeper</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,MONO@-15..0,400..900,0..1,0..1&display=swap">
+<style>
+  /* Layout: one column — title and controls, a status line, then the honeycomb board as large as the screen allows. */
+  :root {
+    --bg: #e8ecf1;
+    --ink: #1c2433;
+    --muted: #5f6b80;
+    --tile: #56688a;
+    --tile-hi: #6d81a6;
+    --open: #f8fafc;
+    --line: #cdd4de;
+    --flag: #e2553f;
+    --accent: #1f8a8a;
+    --n1: #2f6fd6; --n2: #23905a; --n3: #d2462f; --n4: #7a3fc4; --n5: #b0601a; --n6: #127f86;
+    --font: "Recursive", ui-rounded, system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e131b; --ink: #e2e8f1; --muted: #8c97ab; --tile: #2f3e59; --tile-hi: #3d4f70; --open: #18202d; --line: #263042;
+      --flag: #ff7a63; --accent: #4fd1c5;
+      --n1: #6ea3ff; --n2: #5fd08e; --n3: #ff7a63; --n4: #b88cff; --n5: #f0a35a; --n6: #4fd1c5; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e131b; --ink: #e2e8f1; --muted: #8c97ab; --tile: #2f3e59; --tile-hi: #3d4f70; --open: #18202d; --line: #263042;
+    --flag: #ff7a63; --accent: #4fd1c5;
+    --n1: #6ea3ff; --n2: #5fd08e; --n3: #ff7a63; --n4: #b88cff; --n5: #f0a35a; --n6: #4fd1c5; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 400 15px/1.5 var(--font); padding-inline: 16px; padding-block: 20px 32px; }
+  .wrap { max-width: 760px; margin: 0 auto; display: grid; gap: 14px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+  h1 { margin: 0; font: 900 clamp(28px, 6vw, 40px)/1 var(--font); font-variation-settings: "CASL" 1, "slnt" -8; letter-spacing: -0.02em; }
+  h1 span { color: var(--accent); }
+  header a { color: var(--muted); text-decoration: none; }
+  header a:hover { color: var(--ink); }
+  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; gap: 2px; }
+  .seg button { font: 600 13px var(--font); color: var(--muted); background: transparent; border: 0; border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+  .readouts { display: flex; gap: 16px; font-variation-settings: "MONO" 1; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .readouts b { color: var(--ink); font-weight: 700; }
+  .btn { font: 700 13px var(--font); color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+  .btn[aria-pressed="true"] { background: var(--flag); border-color: var(--flag); color: #fff; }
+  .spacer { flex: 1; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #status { min-height: 1.5em; margin: 0; color: var(--muted); }
+  #status.win { color: var(--accent); font-weight: 700; }
+  #status.lose { color: var(--flag); font-weight: 700; }
+  svg { width: 100%; height: auto; max-height: calc(100vh - 220px); display: block; touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  .cell { cursor: pointer; }
+  .cell polygon { fill: var(--tile); stroke: var(--bg); stroke-width: 2.5; transition: fill 0.12s; }
+  .cell:hover polygon { fill: var(--tile-hi); }
+  .cell .shine { fill: #ffffff; opacity: 0.08; pointer-events: none; }
+  .cell.open polygon { fill: var(--open); }
+  .cell.open .shine { opacity: 0; }
+  .cell.open:hover polygon { fill: var(--open); }
+  .cell text { font: 800 15px var(--font); text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+  .cell.boom polygon { fill: var(--flag); }
+  .cell:focus { outline: none; }
+  .cell:focus-visible polygon { stroke: var(--accent); stroke-width: 3; }
+  .mine { fill: var(--ink); } .cell.boom .mine { fill: #fff; }
+  .flagp { fill: var(--flag); } .pole { stroke: #fff; stroke-width: 1.6; }
+  .cell.wrong polygon { fill: var(--line); }
+  .hint { margin: 0; color: var(--muted); font-size: 13.5px; max-width: 64ch; }
+  @media (prefers-reduced-motion: reduce) { .cell polygon { transition: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Hex<span>sweeper</span></h1>
+    <a href="index.html">&larr; playpen</a>
+  </header>
+  <div class="bar">
+    <div class="seg" role="group" aria-label="Board size">
+      <button type="button" data-size="small">small</button>
+      <button type="button" data-size="medium">medium</button>
+      <button type="button" data-size="large">large</button>
+    </div>
+    <div class="readouts"><span>mines <b id="left">0</b></span><span>time <b id="time">0</b></span><span>best <b id="best">–</b></span></div>
+    <span class="spacer"></span>
+    <button class="btn" id="flagmode" type="button" aria-pressed="false">flag mode</button>
+    <button class="btn" id="new" type="button">new board</button>
+  </div>
+  <p id="status" aria-live="polite">Every cell has six neighbours. The first tap is always safe.</p>
+  <svg id="board" role="grid" aria-label="Hexagonal minefield"></svg>
+  <p class="hint">Tap to dig. Right-click, long-press or use flag mode to mark a mine. Tap a number whose mines are all flagged to clear the rest of its neighbours. Keyboard: arrows to move, Enter to dig, F to flag.</p>
+</div>
+<script>
+(() => {
+  const SIZES = { small: { n: 4, mines: 10 }, medium: { n: 6, mines: 24 }, large: { n: 8, mines: 44 } };
+  const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]];
+  const R = 24, SQ3 = Math.sqrt(3);
+  const NS = "http://www.w3.org/2000/svg";
+  const $ = id => document.getElementById(id);
+  const svg = $("board");
+
+  let size = "medium", cells = [], byKey = new Map(), started = false, over = false, t0 = 0, timer = null, flagMode = false, focusKey = "0,0";
+  try { size = localStorage.getItem("hex-size") || size; } catch {}
+  if (!SIZES[size]) size = "medium";
+
+  const key = (q, r) => q + "," + r;
+  const nbrs = c => DIRS.map(([dq, dr]) => byKey.get(key(c.q + dq, c.r + dr))).filter(Boolean);
+  const hexPts = (cx, cy, r) => Array.from({ length: 6 }, (_, i) => { const a = Math.PI / 180 * (60 * i - 30); return `${(cx + r * Math.cos(a)).toFixed(2)},${(cy + r * Math.sin(a)).toFixed(2)}`; }).join(" ");
+
+  function build() {
+    const { n } = SIZES[size];
+    svg.innerHTML = ""; cells = []; byKey.clear();
+    started = false; over = false; clearInterval(timer); $("time").textContent = "0";
+    const w = SQ3 * R * (2 * n + 1), h = R * (3 * n + 2);
+    svg.setAttribute("viewBox", `${-w / 2 - 4} ${-h / 2 - 4} ${w + 8} ${h + 8}`);
+    for (let q = -n; q <= n; q++) for (let r = -n; r <= n; r++) {
+      if (Math.abs(q + r) > n) continue;
+      const x = SQ3 * R * (q + r / 2), y = 1.5 * R * r;
+      const g = document.createElementNS(NS, "g");
+      g.setAttribute("class", "cell"); g.setAttribute("role", "gridcell"); g.setAttribute("tabindex", "-1");
+      g.setAttribute("aria-label", "hidden");
+      const poly = document.createElementNS(NS, "polygon"); poly.setAttribute("points", hexPts(x, y, R));
+      const shine = document.createElementNS(NS, "polygon"); shine.setAttribute("class", "shine"); shine.setAttribute("points", hexPts(x, y - 3, R * 0.62));
+      const layer = document.createElementNS(NS, "g");
+      g.append(poly, shine, layer); svg.appendChild(g);
+      const c = { q, r, x, y, g, layer, mine: false, adj: 0, open: false, flag: false };
+      g.__cell = c; cells.push(c); byKey.set(key(q, r), c);
+    }
+    focusKey = "0,0"; byKey.get(focusKey).g.setAttribute("tabindex", "0");
+    document.querySelectorAll("[data-size]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.size === size)));
+    status("Every cell has six neighbours. The first tap is always safe.");
+    counts(); best();
+  }
+
+  function seed(safe) {
+    const banned = new Set([safe, ...nbrs(safe)]);
+    const pool = cells.filter(c => !banned.has(c));
+    for (let i = pool.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [pool[i], pool[j]] = [pool[j], pool[i]]; }
+    pool.slice(0, SIZES[size].mines).forEach(c => c.mine = true);
+    for (const c of cells) c.adj = nbrs(c).filter(o => o.mine).length;
+    started = true; t0 = performance.now();
+    timer = setInterval(() => $("time").textContent = Math.floor((performance.now() - t0) / 1000), 250);
+  }
+
+  function paint(c) {
+    c.layer.innerHTML = "";
+    c.g.classList.toggle("open", c.open);
+    if (c.open && c.adj && !c.mine) {
+      const t = document.createElementNS(NS, "text");
+      t.setAttribute("x", c.x); t.setAttribute("y", c.y + 1); t.textContent = c.adj;
+      t.style.fill = `var(--n${c.adj})`; c.layer.appendChild(t);
+    }
+    if (c.flag && !c.open) {
+      const pole = document.createElementNS(NS, "line");
+      pole.setAttribute("x1", c.x - 4); pole.setAttribute("x2", c.x - 4); pole.setAttribute("y1", c.y - 9); pole.setAttribute("y2", c.y + 9); pole.setAttribute("class", "pole");
+      const fl = document.createElementNS(NS, "polygon");
+      fl.setAttribute("points", `${c.x - 4},${c.y - 9} ${c.x + 9},${c.y - 4} ${c.x - 4},${c.y + 1}`); fl.setAttribute("class", "flagp");
+      c.layer.append(pole, fl);
+    }
+    if (c.mine && c.open) {
+      const m = document.createElementNS(NS, "path");
+      const s = 9, pts = [];
+      for (let i = 0; i < 12; i++) { const a = Math.PI / 6 * i, rr = i % 2 ? s * 0.45 : s; pts.push(`${(c.x + rr * Math.cos(a)).toFixed(1)},${(c.y + rr * Math.sin(a)).toFixed(1)}`); }
+      m.setAttribute("d", "M" + pts.join("L") + "Z"); m.setAttribute("class", "mine");
+      c.layer.appendChild(m);
+    }
+    c.g.setAttribute("aria-label", c.open ? (c.mine ? "mine" : c.adj ? `${c.adj}` : "empty") : c.flag ? "flagged" : "hidden");
+  }
+
+  function reveal(c) {
+    if (over || c.open || c.flag) return;
+    if (!started) seed(c);
+    if (c.mine) return lose(c);
+    const stack = [c];
+    while (stack.length) {
+      const x = stack.pop(); if (x.open || x.flag) continue;
+      x.open = true; paint(x);
+      if (x.adj === 0) for (const o of nbrs(x)) if (!o.open && !o.mine) stack.push(o);
+    }
+    checkWin();
+  }
+  function chord(c) {
+    if (over || !c.open || !c.adj) return;
+    const ns = nbrs(c);
+    if (ns.filter(o => o.flag).length !== c.adj) return;
+    for (const o of ns) if (!o.open && !o.flag) { if (o.mine) return lose(o); reveal(o); }
+  }
+  function toggleFlag(c) {
+    if (over || c.open) return;
+    c.flag = !c.flag; paint(c); counts();
+  }
+  function primary(c) {
+    if (c.open) chord(c);
+    else if (flagMode) toggleFlag(c);
+    else reveal(c);
+  }
+
+  function lose(hit) {
+    over = true; clearInterval(timer);
+    for (const c of cells) {
+      if (c.mine && !c.flag) { c.open = true; paint(c); }
+      if (c.flag && !c.mine) c.g.classList.add("wrong");
+    }
+    hit.g.classList.add("boom");
+    status("Boom. That one was a mine. Press New board to try again.", "lose");
+  }
+  function checkWin() {
+    if (cells.some(c => !c.mine && !c.open)) return;
+    over = true; clearInterval(timer);
+    const secs = Math.max(1, Math.round((performance.now() - t0) / 1000));
+    for (const c of cells) if (c.mine && !c.flag) { c.flag = true; paint(c); }
+    counts();
+    let prev = null; try { prev = +localStorage.getItem("hex-best-" + size) || null; } catch {}
+    const isBest = prev == null || secs < prev;
+    if (isBest) try { localStorage.setItem("hex-best-" + size, secs); } catch {}
+    status(`Cleared in ${secs} second${secs === 1 ? "" : "s"}.${isBest ? " That's a new best." : ""}`, "win");
+    best();
+  }
+
+  function counts() { $("left").textContent = SIZES[size].mines - cells.filter(c => c.flag).length; }
+  function best() { let b = null; try { b = localStorage.getItem("hex-best-" + size); } catch {} $("best").textContent = b ? b + "s" : "–"; }
+  function status(msg, cls = "") { const s = $("status"); s.textContent = msg; s.className = cls; }
+
+  // ----- pointer: tap, right-click, long-press -----
+  let press = null;
+  svg.addEventListener("contextmenu", e => e.preventDefault());
+  svg.addEventListener("pointerdown", e => {
+    const g = e.target.closest(".cell"); if (!g) return;
+    setFocus(g.__cell, false);
+    if (e.button === 2) { toggleFlag(g.__cell); return; }
+    press = { c: g.__cell, fired: false, t: setTimeout(() => { if (press) { press.fired = true; toggleFlag(press.c); if (navigator.vibrate) try { navigator.vibrate(25); } catch {} } }, 380) };
+  });
+  svg.addEventListener("pointerup", e => {
+    if (!press) return;
+    clearTimeout(press.t);
+    const g = e.target.closest(".cell");
+    if (!press.fired && g && g.__cell === press.c) primary(press.c);
+    press = null;
+  });
+  svg.addEventListener("pointercancel", () => { if (press) clearTimeout(press.t); press = null; });
+  svg.addEventListener("pointerleave", () => { if (press) clearTimeout(press.t); press = null; });
+
+  // ----- keyboard: roving focus over the honeycomb -----
+  function setFocus(c, move = true) {
+    byKey.get(focusKey)?.g.setAttribute("tabindex", "-1");
+    focusKey = key(c.q, c.r); c.g.setAttribute("tabindex", "0"); if (move) c.g.focus();
+  }
+  svg.addEventListener("keydown", e => {
+    const c = byKey.get(focusKey); if (!c) return;
+    const moves = { ArrowRight: [1, 0], ArrowLeft: [-1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    if (moves[e.key]) {
+      e.preventDefault();
+      let [dq, dr] = moves[e.key];
+      // going up/down alternates between the two hexes above so you can walk straight lines
+      if (dr === -1 && c.r % 2 === 0) dq = 1;
+      if (dr === 1 && c.r % 2 !== 0) dq = -1;
+      const nxt = byKey.get(key(c.q + dq, c.r + dr)) || byKey.get(key(c.q, c.r + dr));
+      if (nxt) setFocus(nxt);
+    } else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); primary(c); }
+    else if (e.key === "f" || e.key === "F") toggleFlag(c);
+  });
+
+  document.querySelectorAll("[data-size]").forEach(b => b.addEventListener("click", () => {
+    size = b.dataset.size; try { localStorage.setItem("hex-size", size); } catch {} build();
+  }));
+  $("new").addEventListener("click", build);
+  $("flagmode").addEventListener("click", () => { flagMode = !flagMode; $("flagmode").setAttribute("aria-pressed", String(flagMode)); });
+
+  build();
+  window.__hex = { get cells() { return cells; }, reveal, toggleFlag, chord, get over() { return over; } };
+})();
+</script>
+</body>
+</html>

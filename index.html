@@ -28,6 +28,7 @@
     --bg: #11131d; --ink: #e9ebf7; --muted: #9399b8; --line: #262a3e; --shelf: #181b29; --accent: #8e9cff; color-scheme: dark;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.55 var(--body); padding-inline: 16px; padding-block: 48px 56px; }
   .wrap { max-width: 1040px; margin: 0 auto; display: grid; gap: 40px; }
   header { display: grid; gap: 16px; }
@@ -50,6 +51,9 @@
   .win { aspect-ratio: 16 / 9; max-width: 100%; position: relative; background: #17130f; }
   .win canvas { width: 100%; height: 100%; display: block; image-rendering: auto; }
   .win canvas.px { image-rendering: pixelated; }
+  .section { display: grid; gap: 16px; }
+  .section h2.sh { font: 800 13px var(--mono); text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted); margin: 0; display: flex; gap: 12px; align-items: center; }
+  .section h2.sh::after { content: ""; flex: 1; height: 1px; background: var(--line); }
   .meta { padding: 16px 18px 18px; display: grid; gap: 6px; align-content: start; }
   .meta h2 { font: 500 20px/1.2 var(--display); margin: 0; letter-spacing: -0.01em; }
   .meta p { margin: 0; color: var(--muted); font-size: 15.5px; }
@@ -63,12 +67,49 @@
 <body>
 <div class="wrap">
   <header>
-    <span class="eyebrow">palewoods/claude-s-playpen · 4 toys · 0 dependencies</span>
+    <span class="eyebrow">palewoods/claude-s-playpen · 4 games · 4 toys · 0 dependencies</span>
     <h1>Claude's Playpen<span class="sq">.</span></h1>
-    <p class="lede">You said <b>"go wild"</b>, so here are four small things I wanted to make. Each one is a single HTML file with no build step: open it and play. They're all live below, so pick whichever one is moving in the most interesting way.</p>
+    <p class="lede">You said <b>"go wild"</b>, then <b>"add more cool games"</b>. So here are eight things I wanted to make: four games you can win or lose, and four toys to just play with. Each one is a single HTML file with no build step. They're all live below, so pick whichever one is moving in the most interesting way.</p>
   </header>
 
-  <main class="shelf">
+  <main class="section" aria-label="Games and toys">
+  <h2 class="sh">Games</h2>
+  <div class="shelf">
+    <a class="toy" href="orbit-golf.html">
+      <div class="win"><canvas data-preview="golf"></canvas></div>
+      <div class="meta">
+        <h2>Orbit Golf</h2>
+        <p>Nine holes of mini golf in space. Pull back, let go, and bend your shot around planets' gravity. Avoid the suns, use the wormhole, and try to hit a cup that's orbiting a planet.</p>
+        <div class="tags"><span>9 holes</span><span>par 23</span><span>drag to shoot</span></div>
+      </div>
+    </a>
+    <a class="toy" href="delve.html">
+      <div class="win"><canvas data-preview="delve"></canvas></div>
+      <div class="meta">
+        <h2>Delve</h2>
+        <p>A turn-based roguelike. Eight procedurally generated floors of rats, trolls and wraiths, with a dragon at the bottom guarding its heart. You'll probably die, and that's part of the fun.</p>
+        <div class="tags"><span>permadeath</span><span>9 monster types</span><span>keys or tap</span></div>
+      </div>
+    </a>
+    <a class="toy" href="light-cycles.html">
+      <div class="win"><canvas data-preview="cycles"></canvas></div>
+      <div class="meta">
+        <h2>Light Cycles</h2>
+        <p>Your trail is a wall. Outlast three bots that flood-fill the arena to find space and try to cut you off. Play two-player on one keyboard if you have a rival nearby.</p>
+        <div class="tags"><span>vs bots</span><span>local 2P</span><span>boost with space</span></div>
+      </div>
+    </a>
+    <a class="toy" href="hexsweeper.html">
+      <div class="win"><canvas data-preview="hex"></canvas></div>
+      <div class="meta">
+        <h2>Hexsweeper</h2>
+        <p>Minesweeper on a honeycomb. Six neighbours instead of eight changes every pattern you thought you knew. The first tap is always safe and it keeps your best times.</p>
+        <div class="tags"><span>3 board sizes</span><span>chording</span><span>long-press to flag</span></div>
+      </div>
+    </a>
+  </div>
+  <h2 class="sh">Toys</h2>
+  <div class="shelf">
     <a class="toy" href="sandbox.html">
       <div class="win"><canvas class="px" data-preview="sand" width="160" height="90"></canvas></div>
       <div class="meta">
@@ -101,10 +142,11 @@
         <div class="tags"><span>parser game</span><span>50 points</span><span>a duck helps</span></div>
       </div>
     </a>
+  </div>
   </main>
 
   <footer>
-    <span>Made by Claude, for someone who said "go wild".</span>
+    <span>Made by Claude, for someone who said "go wild" and then asked for more.</span>
     <span>Turn on GitHub Pages for this repo and it's a website. Or just open <code>index.html</code>.</span>
   </footer>
 </div>
@@ -256,7 +298,147 @@
     };
   }
 
-  const kinds = { sand, birds, life, text };
+  // --- golf: a ball looping a planet and dropping into the cup ---
+  function golf(c) {
+    const ctx = c.getContext("2d"); let t = 0, trail = [];
+    const stars = Array.from({ length: 90 }, () => [Math.random(), Math.random(), Math.random()]);
+    return () => {
+      const W = c.width, H = c.height, u = H / 100; t += 0.016;
+      ctx.fillStyle = "#070914"; ctx.fillRect(0, 0, W, H);
+      for (const [x, y, a] of stars) { ctx.fillStyle = `rgba(220,230,255,${a * 0.7})`; ctx.fillRect(x * W, y * H, 1.2 * dpr, 1.2 * dpr); }
+      const px = W * 0.48, py = H * 0.55, pr = 17 * u;
+      const g = ctx.createRadialGradient(px - pr * 0.4, py - pr * 0.4, pr * 0.1, px, py, pr);
+      g.addColorStop(0, "hsl(200,55%,72%)"); g.addColorStop(0.7, "hsl(200,55%,42%)"); g.addColorStop(1, "hsl(200,55%,18%)");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, py, pr, 0, 7); ctx.fill();
+      ctx.strokeStyle = "hsla(230,50%,80%,0.45)"; ctx.lineWidth = 2 * dpr; ctx.beginPath(); ctx.ellipse(px, py, pr * 1.7, pr * 0.38, -0.35, 0, 7); ctx.stroke();
+      const sx = W * 0.16, sy = H * 0.3, sr = 9 * u;
+      const sg = ctx.createRadialGradient(sx, sy, 0, sx, sy, sr * 2.4); sg.addColorStop(0, "#ffb347aa"); sg.addColorStop(1, "#ff6a0000");
+      ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(sx, sy, sr * 2.4, 0, 7); ctx.fill();
+      ctx.fillStyle = "#ffc24a"; ctx.beginPath(); ctx.arc(sx, sy, sr, 0, 7); ctx.fill();
+      const cx = W * 0.84, cy = H * 0.3;
+      ctx.strokeStyle = "#ffd166"; ctx.lineWidth = 2 * dpr; ctx.beginPath(); ctx.arc(cx, cy, 4 * u, 0, 7); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx, cy - 4 * u); ctx.lineTo(cx, cy - 13 * u); ctx.stroke();
+      ctx.fillStyle = "#ffd166"; ctx.beginPath(); ctx.moveTo(cx, cy - 13 * u); ctx.lineTo(cx + 5 * u, cy - 11 * u); ctx.lineTo(cx, cy - 9 * u); ctx.fill();
+      // path: a slingshot loop around the planet, then off to the cup
+      const k = (t % 4) / 4;
+      let bx, by;
+      if (k < 0.65) { const a = Math.PI * 0.9 + k / 0.65 * Math.PI * 1.5; const rr = pr * (1.9 - k * 0.6); bx = px + Math.cos(a) * rr * 1.25; by = py + Math.sin(a) * rr; }
+      else { const f = (k - 0.65) / 0.35, a = Math.PI * 0.9 + Math.PI * 1.5, rr = pr * 1.51; const x0 = px + Math.cos(a) * rr * 1.25, y0 = py + Math.sin(a) * rr; bx = x0 + (cx - x0) * f; by = y0 + (cy - y0) * f - Math.sin(f * Math.PI) * 6 * u; }
+      if (k < 0.01) trail = [];
+      trail.push([bx, by]); if (trail.length > 40) trail.shift();
+      for (let i = 1; i < trail.length; i++) { ctx.strokeStyle = `rgba(160,220,255,${i / trail.length * 0.6})`; ctx.lineWidth = 2 * dpr; ctx.beginPath(); ctx.moveTo(...trail[i - 1]); ctx.lineTo(...trail[i]); ctx.stroke(); }
+      ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(bx, by, 2.2 * u, 0, 7); ctx.fill();
+    };
+  }
+
+  // --- delve: a torchlit room, the @ creeping toward a goblin ---
+  function delve(c) {
+    const ctx = c.getContext("2d");
+    const M = [
+      "##############################",
+      "#........#.......#...........#",
+      "#..$.....#.......+.....!.....#",
+      "#........+.......#...........#",
+      "#........#.......#.......g...#",
+      "######+###########...........#",
+      "     #.#         #.......>...#",
+      "     #.#         #############",
+      "     #.#                      ",
+    ];
+    const path = [[2, 3], [3, 3], [4, 3], [5, 3], [6, 3], [7, 3], [8, 3], [9, 3], [10, 3], [11, 3], [12, 2], [13, 2], [14, 2], [15, 2], [16, 2], [17, 2], [18, 2], [19, 3], [20, 3], [21, 4], [22, 4], [23, 4]];
+    let t = 0;
+    return () => {
+      t++;
+      const W = c.width, H = c.height, cs = Math.min(W / 30, H / 9);
+      const step = Math.floor(t / 26) % (path.length + 12), [ax, ay] = path[Math.min(step, path.length - 1)];
+      ctx.fillStyle = "#0c0a09"; ctx.fillRect(0, 0, W, H);
+      ctx.font = `${cs * 0.8}px "JetBrains Mono", ui-monospace, monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      const ox = (W - cs * 30) / 2, oy = (H - cs * 9) / 2;
+      for (let y = 0; y < M.length; y++) for (let x = 0; x < 30; x++) {
+        let ch = M[y][x]; if (!ch || ch === " ") continue;
+        const d = Math.hypot(x - ax, y - ay), light = Math.max(0.12, 1 - d / 9);
+        const X = ox + x * cs, Y = oy + y * cs;
+        if (ch === "#") { ctx.fillStyle = `rgba(${120 * light + 30},${92 * light + 24},${70 * light + 20},1)`; ctx.fillRect(X + 0.5, Y + 0.5, cs - 1, cs - 1); continue; }
+        if (ch === "g" && step >= path.length) ch = ".";
+        const col = { "$": "#ffcf5c", "!": "#ff6b6b", ">": "#ffe0a8", "+": "#c08a4a", "g": "#6fbf4a" }[ch] || `rgba(234,223,207,${0.3 * light})`;
+        if (x === 3 && y === 2 && step > 1) continue;
+        ctx.fillStyle = col; ctx.globalAlpha = ch === "." ? 1 : Math.max(0.3, light); ctx.fillText(ch === "." ? "·" : ch, X + cs / 2, Y + cs / 2); ctx.globalAlpha = 1;
+      }
+      ctx.fillStyle = "#fff4dc"; ctx.font = `700 ${cs * 0.85}px "JetBrains Mono", ui-monospace, monospace`;
+      ctx.fillText("@", ox + ax * cs + cs / 2, oy + ay * cs + cs / 2);
+      if (step >= path.length - 1 && step < path.length + 2) { ctx.fillStyle = "rgba(224,83,61,0.18)"; ctx.fillRect(0, 0, W, H); }
+    };
+  }
+
+  // --- cycles: three bots riding a small arena ---
+  function cycles(c) {
+    const ctx = c.getContext("2d"), C = 64, R = 36, DX = [0, 1, 0, -1], DY = [-1, 0, 1, 0];
+    const cols = ["#3df2ff", "#ffb43d", "#ff4fd8"];
+    let occ, bots, t = 0, wait = 0;
+    const reset = () => { occ = new Uint8Array(C * R); bots = [[8, 18, 1], [55, 18, 3], [32, 4, 2]].map(([x, y, d], i) => ({ x, y, d, i, alive: true })); bots.forEach(b => occ[b.y * C + b.x] = b.i + 1); };
+    const free = (x, y) => x >= 0 && y >= 0 && x < C && y < R && !occ[y * C + x];
+    const room = (x, y, d) => { let n = 0; while (n < 12 && free(x + DX[d] * (n + 1), y + DY[d] * (n + 1))) n++; return n; };
+    reset();
+    return () => {
+      const W = c.width, H = c.height, cs = Math.min(W / C, H / R);
+      if (++t % 2 === 0) {
+        if (wait > 0) { if (--wait === 0) reset(); }
+        else {
+          for (const b of bots) {
+            if (!b.alive) continue;
+            const opts = [b.d, (b.d + 1) % 4, (b.d + 3) % 4].map(d => [d, room(b.x, b.y, d) + (d === b.d ? 1.5 : 0) + Math.random() * 2]);
+            opts.sort((p, q) => q[1] - p[1]); b.d = opts[0][0];
+            const nx = b.x + DX[b.d], ny = b.y + DY[b.d];
+            if (!free(nx, ny)) { b.alive = false; continue; }
+            b.x = nx; b.y = ny; occ[ny * C + nx] = b.i + 1;
+          }
+          if (bots.filter(b => b.alive).length <= 1) wait = 40;
+        }
+      }
+      ctx.fillStyle = "#05060d"; ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = "#10142a"; ctx.lineWidth = 1; ctx.beginPath();
+      for (let x = 0; x <= C; x += 4) { ctx.moveTo(x * cs, 0); ctx.lineTo(x * cs, R * cs); }
+      for (let y = 0; y <= R; y += 4) { ctx.moveTo(0, y * cs); ctx.lineTo(C * cs, y * cs); }
+      ctx.stroke();
+      for (let i = 0; i < occ.length; i++) if (occ[i]) { ctx.fillStyle = cols[occ[i] - 1]; ctx.globalAlpha = bots[occ[i] - 1].alive ? 0.85 : 0.25; ctx.fillRect((i % C) * cs, ((i / C) | 0) * cs, cs, cs); }
+      ctx.globalAlpha = 1;
+      for (const b of bots) if (b.alive) { ctx.shadowColor = cols[b.i]; ctx.shadowBlur = 12; ctx.fillStyle = "#fff"; ctx.fillRect(b.x * cs - 1, b.y * cs - 1, cs + 2, cs + 2); }
+      ctx.shadowBlur = 0;
+    };
+  }
+
+  // --- hex: a honeycomb uncovering itself from a first tap ---
+  function hex(c) {
+    const ctx = c.getContext("2d"), N = 5, cellsArr = [];
+    const NUM = ["", "#6ea3ff", "#5fd08e", "#ff7a63", "#b88cff", "#f0a35a", "#4fd1c5"];
+    let order, shown, t = 0, hold = 0;
+    for (let q = -N; q <= N; q++) for (let r = -N; r <= N; r++) if (Math.abs(q + r) <= N) cellsArr.push({ q, r });
+    const reset = () => {
+      const key = (q, r) => q + "," + r, map = new Map(cellsArr.map(o => [key(o.q, o.r), o]));
+      cellsArr.forEach(o => { o.mine = Math.random() < 0.16 && Math.abs(o.q) + Math.abs(o.r) > 2; o.open = false; o.flag = false; });
+      const D = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]];
+      cellsArr.forEach(o => o.adj = D.filter(([a, b]) => map.get(key(o.q + a, o.r + b))?.mine).length);
+      order = cellsArr.filter(o => !o.mine).sort((a, b) => (Math.abs(a.q) + Math.abs(a.r) + Math.abs(a.q + a.r)) - (Math.abs(b.q) + Math.abs(b.r) + Math.abs(b.q + b.r)) + (Math.random() - 0.5) * 2);
+      shown = 0; hold = 0;
+    };
+    reset();
+    return () => {
+      const W = c.width, H = c.height, s = Math.min(W / (Math.sqrt(3) * (2 * N + 1) + 1), H / (3 * N + 2.5));
+      if (++t % 5 === 0) { if (shown < order.length) order[shown++].open = true; else if (++hold > 20) reset(); if (shown > order.length * 0.7) cellsArr.forEach(o => { if (o.mine && Math.random() < 0.05) o.flag = true; }); }
+      ctx.fillStyle = "#0e131b"; ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = `800 ${s * 0.75}px Recursive, system-ui, sans-serif`;
+      for (const o of cellsArr) {
+        const x = W / 2 + Math.sqrt(3) * s * (o.q + o.r / 2), y = H / 2 + 1.5 * s * o.r;
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) { const a = Math.PI / 180 * (60 * i - 30); ctx[i ? "lineTo" : "moveTo"](x + s * 0.93 * Math.cos(a), y + s * 0.93 * Math.sin(a)); }
+        ctx.closePath(); ctx.fillStyle = o.open ? "#18202d" : "#2f3e59"; ctx.fill();
+        if (o.open && o.adj) { ctx.fillStyle = NUM[o.adj]; ctx.fillText(o.adj, x, y + 1); }
+        if (o.flag && !o.open) { ctx.fillStyle = "#ff7a63"; ctx.beginPath(); ctx.moveTo(x - s * 0.2, y - s * 0.4); ctx.lineTo(x + s * 0.4, y - s * 0.18); ctx.lineTo(x - s * 0.2, y + s * 0.05); ctx.fill(); }
+      }
+    };
+  }
+
+  const kinds = { sand, birds, life, text, golf, delve, cycles, hex };
   const live = [];
   document.querySelectorAll("canvas[data-preview]").forEach(c => {
     fit(c);
@@ -266,7 +448,7 @@
     // warm up so the first still frame already shows something
     for (let i = 0; i < (c.dataset.preview === "text" ? 400 : 120); i++) draw();
   });
-  addEventListener("resize", () => live.forEach(e => fit(e.c)));
+  addEventListener("resize", () => live.forEach(e => { fit(e.c); e.draw(); }));
   const io = new IntersectionObserver(es => es.forEach(x => { const e = live.find(l => l.c === x.target); if (e) e.visible = x.isIntersecting; }));
   live.forEach(e => io.observe(e.c));
   if (!reduce) (function loop() { live.forEach(e => e.visible && e.draw()); requestAnimationFrame(loop); })();

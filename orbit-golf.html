@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Orbit Golf</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: the course fills the screen; a scorecard strip on top, toasts centred, a scorecard sheet between holes. */
+  :root {
+    --space: #070914;
+    --ink: #eef1ff;
+    --muted: #8d94b8;
+    --flag: #ffd166;
+    --card: #12162bee;
+    --edge: #262d52;
+    --display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--space); color: var(--ink); font: 13px/1.5 var(--mono); overflow: hidden; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
+  .hud {
+    position: fixed; left: 0; right: 0; top: 0; padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 12px;
+    display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 20px; pointer-events: none;
+    background: linear-gradient(#070914, #07091400);
+  }
+  .hud a, .hud button { pointer-events: auto; }
+  .title { display: grid; gap: 2px; }
+  .title b { font: 800 clamp(18px, 3vw, 24px)/1.1 var(--display); letter-spacing: -0.01em; }
+  .title span, .nums { color: var(--muted); }
+  .nums { display: flex; gap: 18px; align-items: start; font-variant-numeric: tabular-nums; }
+  .nums b { color: var(--ink); font-weight: 500; }
+  .hud a { color: var(--muted); text-decoration: none; }
+  .hud a:hover, .hud button:hover { color: var(--ink); }
+  .hud button { font: inherit; color: var(--muted); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+  #toast {
+    position: fixed; left: 50%; top: 22%; transform: translate(-50%, 0); pointer-events: none;
+    font: 800 clamp(26px, 6vw, 54px)/1 var(--display); letter-spacing: -0.02em; text-align: center;
+    color: var(--flag); text-shadow: 0 0 30px #ffd16666; opacity: 0; transition: opacity 0.3s, transform 0.3s;
+    width: calc(100% - 32px);
+  }
+  #toast.show { opacity: 1; transform: translate(-50%, -8px); }
+  #toast small { display: block; font: 500 14px var(--mono); color: var(--ink); margin-top: 10px; text-shadow: none; }
+  .sheet {
+    position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; background: #070914aa;
+  }
+  .sheet > div {
+    background: var(--card); border: 1px solid var(--edge); border-radius: 14px; padding: 22px;
+    width: min(560px, 100%); display: grid; gap: 16px;
+  }
+  .sheet h2 { font: 800 30px/1 var(--display); margin: 0; }
+  .sheet p { margin: 0; color: var(--muted); }
+  .tbl { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { padding: 6px 4px; text-align: center; border-bottom: 1px solid var(--edge); }
+  th { color: var(--muted); font-weight: 400; }
+  td.under { color: #7ef0b0; } td.over { color: #ff8a7a; }
+  .go { font: 800 16px var(--display); background: var(--flag); color: #1a1405; border: 0; border-radius: 999px; padding: 12px 22px; cursor: pointer; justify-self: start; }
+  :focus-visible { outline: 2px solid var(--flag); outline-offset: 3px; }
+  .help { position: fixed; left: 16px; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); color: var(--muted); pointer-events: none; max-width: calc(100% - 32px); }
+</style>
+</head>
+<body>
+<canvas id="c" aria-label="Orbit golf course. Drag anywhere to pull back the slingshot, release to shoot."></canvas>
+<div class="hud">
+  <div class="title"><b id="hname">First Light</b><span id="hsub">Hole 1 of 9 · Par 2</span></div>
+  <div class="nums">
+    <span>strokes <b id="strokes">0</b></span>
+    <span>total <b id="total">E</b></span>
+    <button type="button" id="reset">retry (R)</button>
+    <a href="index.html">&larr; playpen</a>
+  </div>
+</div>
+<div id="toast" role="status"></div>
+<div class="help" id="help">Drag anywhere and let go to shoot. Planets pull. Suns burn.</div>
+<div class="sheet" id="sheet" hidden><div>
+  <h2 id="sh-title">Scorecard</h2>
+  <p id="sh-sub"></p>
+  <div class="tbl"><table id="card"></table></div>
+  <button class="go" id="sh-go" type="button">Next hole</button>
+</div></div>
+<script>
+(() => {
+  const VW = 1000, VH = 625;          // course design space
+  const G = 1900;                      // accel at a planet's surface, px/s^2 (scales with r^2/d^2)
+  const BALL = 7, MAXPOW = 740, PULL = 190;
+
+  // planets: x, y, r, hue, opts { sun, ring, orbit: { around, dist, speed, phase } }
+  const LEVELS = [
+    { name: "First Light", par: 2, tee: [120, 312], cup: { x: 880, y: 312 },
+      bodies: [{ x: 500, y: 330, r: 72, hue: 200 }] },
+    { name: "Slingshot", par: 2, tee: [100, 520], cup: { x: 900, y: 140 },
+      bodies: [{ x: 420, y: 250, r: 55, hue: 20 }, { x: 700, y: 450, r: 65, hue: 280, ring: true }] },
+    { name: "Too Close to the Sun", par: 3, tee: [100, 312], cup: { x: 900, y: 312 },
+      bodies: [{ x: 500, y: 312, r: 62, sun: true }, { x: 500, y: 85, r: 38, hue: 160 }, { x: 500, y: 545, r: 38, hue: 330 }] },
+    { name: "Moonrise", par: 2, tee: [120, 480], cup: { x: 880, y: 130 },
+      bodies: [{ x: 620, y: 340, r: 75, hue: 210 }, { r: 20, hue: 45, orbit: { around: 0, dist: 160, speed: 0.9, phase: 2 } }] },
+    { name: "Binary", par: 2, tee: [100, 500], cup: { x: 760, y: 312 },
+      bodies: [{ x: 760, y: 175, r: 58, hue: 10 }, { x: 760, y: 450, r: 58, hue: 190 }] },
+    { name: "Wormhole", par: 3, tee: [100, 312], cup: { x: 885, y: 312 },
+      bodies: [{ x: 610, y: 95, r: 48, sun: true }, { x: 610, y: 312, r: 58, sun: true }, { x: 610, y: 530, r: 48, sun: true }, { x: 290, y: 470, r: 44, hue: 260 }],
+      worm: { a: [330, 140], b: [820, 520] } },
+    { name: "Asteroid Belt", par: 3, tee: [80, 560], cup: { x: 920, y: 80 },
+      bodies: [[300, 470, 22], [380, 380, 30], [470, 330, 18], [520, 230, 34], [610, 300, 20], [660, 180, 26], [400, 200, 16], [750, 360, 24], [820, 230, 18]]
+        .map(([x, y, r], i) => ({ x, y, r, hue: 25 + i * 9, rock: true })) },
+    { name: "Moving Target", par: 3, tee: [100, 312], cup: { orbit: { around: 0, dist: 150, speed: 0.55, phase: 0 } },
+      bodies: [{ x: 640, y: 312, r: 70, hue: 120, ring: true }] },
+    { name: "The Giant", par: 3, tee: [100, 90], cup: { x: 880, y: 545 },
+      bodies: [{ x: 500, y: 330, r: 150, hue: 28, ring: true }, { r: 22, hue: 210, orbit: { around: 0, dist: 235, speed: -0.45, phase: 0.6 } }] },
+  ];
+
+  const $ = id => document.getElementById(id);
+  const canvas = $("c"), ctx = canvas.getContext("2d");
+  let cw, ch, scale, ox, oy, dpr = Math.min(2, devicePixelRatio || 1), stars = null;
+
+  function resize() {
+    cw = innerWidth; ch = innerHeight;
+    canvas.width = cw * dpr; canvas.height = ch * dpr;
+    const top = 60; // leave room for the HUD
+    scale = Math.min(cw / VW, (ch - top) / VH);
+    ox = (cw - VW * scale) / 2; oy = top + (ch - top - VH * scale) / 2;
+    stars = document.createElement("canvas"); stars.width = canvas.width; stars.height = canvas.height;
+    const s = stars.getContext("2d");
+    for (let i = 0; i < (cw * ch) / 1800; i++) {
+      s.fillStyle = `hsla(${200 + Math.random() * 60}, 60%, 90%, ${Math.random() * 0.7 + 0.1})`;
+      const z = Math.random() < 0.08 ? 2 : 1;
+      s.fillRect(Math.random() * stars.width, Math.random() * stars.height, z * dpr, z * dpr);
+    }
+    const neb = s.createRadialGradient(stars.width * 0.75, stars.height * 0.3, 0, stars.width * 0.75, stars.height * 0.3, stars.width * 0.5);
+    neb.addColorStop(0, "#3a1f6a33"); neb.addColorStop(1, "#3a1f6a00");
+    s.fillStyle = neb; s.fillRect(0, 0, stars.width, stars.height);
+  }
+  addEventListener("resize", resize); resize();
+
+  // ----- game state -----
+  let L, li = 0, time = 0, strokes = 0, scores = [], ball, aim = null, state = "aim", lastRest, trail = [], flight = 0, sinkAnim = 0;
+
+  function bodyPos(b, t) {
+    if (!b.orbit) return [b.x, b.y];
+    const c = L.bodies[b.orbit.around], [cx, cy] = bodyPos(c, t), a = b.orbit.phase + b.orbit.speed * t;
+    return [cx + Math.cos(a) * b.orbit.dist, cy + Math.sin(a) * b.orbit.dist];
+  }
+  function cupPos(t) {
+    const c = L.cup;
+    if (!c.orbit) return [c.x, c.y];
+    const p = L.bodies[c.orbit.around], [px, py] = bodyPos(p, t), a = c.orbit.phase + c.orbit.speed * t;
+    return [px + Math.cos(a) * c.orbit.dist, py + Math.sin(a) * c.orbit.dist];
+  }
+
+  function load(i) {
+    li = i; L = LEVELS[i]; time = 0; strokes = 0; trail = []; aim = null; sinkAnim = 0;
+    ball = { x: L.tee[0], y: L.tee[1], vx: 0, vy: 0, rest: { tee: true } };
+    lastRest = { ...ball.rest, x: ball.x, y: ball.y };
+    state = "aim"; hud();
+  }
+
+  function restPos(r, t) {
+    if (r.tee) return [r.x ?? L.tee[0], r.y ?? L.tee[1]];
+    const b = L.bodies[r.body], [bx, by] = bodyPos(b, t), d = b.r + BALL + 0.5;
+    return [bx + Math.cos(r.ang) * d, by + Math.sin(r.ang) * d];
+  }
+
+  // one physics step; returns an event string or null. Shared by the game and the aim preview.
+  function step(p, t, dt, live) {
+    let ax = 0, ay = 0;
+    for (let k = 0; k < L.bodies.length; k++) {
+      const b = L.bodies[k], [bx, by] = bodyPos(b, t);
+      const dx = bx - p.x, dy = by - p.y, d2 = dx * dx + dy * dy, d = Math.sqrt(d2);
+      const a = G * b.r * b.r * (b.sun ? 1.25 : 1) / Math.max(d2, b.r * b.r);
+      ax += dx / d * a; ay += dy / d * a;
+      if (d < b.r + BALL) {
+        if (b.sun) return "sun";
+        if (!live) return "hit";
+        // bounce off the surface
+        const nx = -dx / d, ny = -dy / d;
+        p.x = bx + nx * (b.r + BALL); p.y = by + ny * (b.r + BALL);
+        // work in the body's frame so moons carry the ball with them
+        let mvx = 0, mvy = 0;
+        if (b.orbit) { const [x2, y2] = bodyPos(b, t + 0.01); mvx = (x2 - bx) / 0.01; mvy = (y2 - by) / 0.01; }
+        let rvx = p.vx - mvx, rvy = p.vy - mvy;
+        const vn = rvx * nx + rvy * ny;
+        if (vn < 0) {
+          const tx = -ny, ty = nx, vt = rvx * tx + rvy * ty;
+          const nvn = -vn * 0.42, nvt = vt * 0.8;
+          rvx = nx * nvn + tx * nvt; rvy = ny * nvn + ty * nvt;
+          p.vx = rvx + mvx; p.vy = rvy + mvy;
+          if (Math.hypot(rvx, rvy) < 70) { p.rest = { body: k, ang: Math.atan2(ny, nx) }; return "rest"; }
+        }
+      }
+    }
+    p.vx += ax * dt; p.vy += ay * dt;
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    // wormhole
+    if (p.cool > 0) p.cool -= dt;
+    if (L.worm && !(p.cool > 0)) {
+      const [wx, wy] = L.worm.a;
+      if (Math.hypot(p.x - wx, p.y - wy) < 18) { p.x = L.worm.b[0]; p.y = L.worm.b[1]; p.cool = 0.5; return "worm"; }
+    }
+    // cup: a gentle pull, then capture
+    const [cx, cy] = cupPos(t), cd = Math.hypot(p.x - cx, p.y - cy);
+    if (cd < 15) return "sink";
+    if (cd < 46) { p.vx += (cx - p.x) * 6 * dt; p.vy += (cy - p.y) * 6 * dt; }
+    if (p.x < -400 || p.x > VW + 400 || p.y < -400 || p.y > VH + 400) return "lost";
+    return null;
+  }
+
+  // ----- input -----
+  function toWorld(e) { return [(e.clientX - ox) / scale, (e.clientY - oy) / scale]; }
+  canvas.addEventListener("pointerdown", e => {
+    if (state !== "aim") return;
+    canvas.setPointerCapture(e.pointerId);
+    const [x, y] = toWorld(e); aim = { sx: x, sy: y, x, y };
+    $("help").hidden = true;
+  });
+  canvas.addEventListener("pointermove", e => { if (aim) { const [x, y] = toWorld(e); aim.x = x; aim.y = y; } });
+  canvas.addEventListener("pointerup", () => {
+    if (!aim) return;
+    const v = aimVec(); aim = null;
+    if (!v || Math.hypot(v[0], v[1]) < 40) return;
+    shoot(v[0], v[1]);
+  });
+  function aimVec() {
+    if (!aim) return null;
+    let dx = aim.sx - aim.x, dy = aim.sy - aim.y;
+    const len = Math.hypot(dx, dy); if (len < 4) return null;
+    const pow = Math.min(len, PULL) / PULL * MAXPOW;
+    return [dx / len * pow, dy / len * pow];
+  }
+  function shoot(vx, vy) {
+    const [x, y] = restPos(ball.rest, time);
+    lastRest = { ...ball.rest, x, y };
+    ball.x = x; ball.y = y; ball.vx = vx; ball.vy = vy; ball.rest = null;
+    strokes++; flight = 0; trail = []; state = "fly"; hud();
+  }
+  function penalty(msg) {
+    strokes++; toast(msg, "+1 stroke");
+    ball.rest = lastRest.tee ? { tee: true, x: lastRest.x, y: lastRest.y } : { body: lastRest.body, ang: lastRest.ang };
+    ball.vx = ball.vy = 0; state = "aim"; trail = []; hud();
+  }
+  addEventListener("keydown", e => { if (e.key === "r" || e.key === "R") retry(); });
+  $("reset").addEventListener("click", retry);
+  function retry() { if (state === "sheet") return; load(li); toast("Hole restarted"); }
+
+  // ----- HUD + sheets -----
+  const parTotal = () => scores.reduce((s, v, i) => s + v - LEVELS[i].par, 0);
+  const fmt = n => n === 0 ? "E" : n > 0 ? "+" + n : String(n);
+  function hud() {
+    $("hname").textContent = L.name;
+    $("hsub").textContent = `Hole ${li + 1} of ${LEVELS.length} · Par ${L.par}`;
+    $("strokes").textContent = strokes;
+    $("total").textContent = fmt(parTotal());
+  }
+  let toastT = 0;
+  function toast(msg, sub = "") {
+    const t = $("toast"); t.innerHTML = msg + (sub ? `<small>${sub}</small>` : "");
+    t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 1600);
+  }
+  function scoreName(d, s) {
+    if (s === 1) return "Hole in one!";
+    return { "-3": "Albatross!", "-2": "Eagle!", "-1": "Birdie!", "0": "Par", "1": "Bogey", "2": "Double bogey" }[d] || `+${d}`;
+  }
+  function card() {
+    const head = LEVELS.map((_, i) => `<th>${i + 1}</th>`).join("");
+    const par = LEVELS.map(l => `<td>${l.par}</td>`).join("");
+    const you = LEVELS.map((l, i) => scores[i] == null ? "<td>·</td>" : `<td class="${scores[i] < l.par ? "under" : scores[i] > l.par ? "over" : ""}">${scores[i]}</td>`).join("");
+    $("card").innerHTML = `<tr><th>hole</th>${head}</tr><tr><th>par</th>${par}</tr><tr><th>you</th>${you}</tr>`;
+  }
+  function sink() {
+    state = "sheet"; scores[li] = strokes; hud();
+    const d = strokes - L.par;
+    setTimeout(() => {
+      card();
+      const last = li === LEVELS.length - 1;
+      $("sh-title").textContent = scoreName(d, strokes);
+      if (last) {
+        const total = scores.reduce((a, b) => a + b, 0), rel = parTotal();
+        let best = null; try { best = +localStorage.getItem("orbit-golf-best") || null; } catch {}
+        const isBest = best == null || total < best;
+        if (isBest) try { localStorage.setItem("orbit-golf-best", total); } catch {}
+        $("sh-sub").textContent = `Round complete: ${total} strokes (${fmt(rel)}). ${isBest ? "That's your best round." : `Your best is ${best}.`}`;
+        $("sh-go").textContent = "Play again";
+      } else {
+        $("sh-sub").textContent = `${L.name} in ${strokes}. Next up: ${LEVELS[li + 1].name}, par ${LEVELS[li + 1].par}.`;
+        $("sh-go").textContent = "Next hole";
+      }
+      $("sheet").hidden = false; $("sh-go").focus();
+    }, 900);
+  }
+  $("sh-go").addEventListener("click", () => {
+    $("sheet").hidden = true;
+    if (li === LEVELS.length - 1) { scores = []; load(0); } else load(li + 1);
+  });
+
+  // ----- drawing -----
+  function planet(b, x, y) {
+    if (b.sun) {
+      const flick = 1 + Math.sin(time * 7 + x) * 0.03;
+      const glow = ctx.createRadialGradient(x, y, b.r * 0.5, x, y, b.r * 2.6 * flick);
+      glow.addColorStop(0, "#ffb34788"); glow.addColorStop(1, "#ff6a0000");
+      ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(x, y, b.r * 2.6, 0, 7); ctx.fill();
+      const g = ctx.createRadialGradient(x - b.r * 0.3, y - b.r * 0.3, 0, x, y, b.r);
+      g.addColorStop(0, "#fff6d0"); g.addColorStop(0.5, "#ffc24a"); g.addColorStop(1, "#ff6a1a");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, b.r, 0, 7); ctx.fill();
+      return;
+    }
+    // gravity well hint
+    ctx.strokeStyle = `hsla(${b.hue}, 60%, 70%, 0.07)`; ctx.lineWidth = 1;
+    for (let k = 1; k <= 3; k++) { ctx.beginPath(); ctx.arc(x, y, b.r * (1 + k * 0.55), 0, 7); ctx.stroke(); }
+    const g = ctx.createRadialGradient(x - b.r * 0.4, y - b.r * 0.45, b.r * 0.1, x, y, b.r);
+    const sat = b.rock ? 18 : 55;
+    g.addColorStop(0, `hsl(${b.hue}, ${sat}%, 72%)`); g.addColorStop(0.7, `hsl(${b.hue}, ${sat}%, 42%)`); g.addColorStop(1, `hsl(${b.hue}, ${sat}%, 18%)`);
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, b.r, 0, 7); ctx.fill();
+    if (!b.rock && b.r > 50) { // bands
+      ctx.save(); ctx.beginPath(); ctx.arc(x, y, b.r, 0, 7); ctx.clip();
+      ctx.fillStyle = `hsla(${b.hue + 20}, 60%, 85%, 0.12)`;
+      for (let k = -2; k <= 2; k++) ctx.fillRect(x - b.r, y + k * b.r * 0.32 - b.r * 0.06, b.r * 2, b.r * 0.1);
+      ctx.restore();
+    }
+    if (b.ring) {
+      ctx.strokeStyle = `hsla(${b.hue + 30}, 50%, 80%, 0.45)`; ctx.lineWidth = Math.max(2, b.r * 0.06);
+      ctx.beginPath(); ctx.ellipse(x, y, b.r * 1.7, b.r * 0.38, -0.35, 0, 7); ctx.stroke();
+    }
+  }
+
+  function draw() {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = "#070914"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(stars, 0, 0);
+    ctx.setTransform(scale * dpr, 0, 0, scale * dpr, ox * dpr, oy * dpr);
+    // course bounds, very faint
+    ctx.strokeStyle = "#ffffff0d"; ctx.lineWidth = 1 / scale; ctx.strokeRect(0, 0, VW, VH);
+
+    // orbits of moons
+    for (const b of L.bodies) if (b.orbit) {
+      const [cx, cy] = bodyPos(L.bodies[b.orbit.around], time);
+      ctx.strokeStyle = "#ffffff12"; ctx.setLineDash([3, 6]); ctx.beginPath(); ctx.arc(cx, cy, b.orbit.dist, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+    }
+    if (L.worm) {
+      for (const [k, [x, y]] of [["a", L.worm.a], ["b", L.worm.b]]) {
+        for (let j = 0; j < 4; j++) {
+          ctx.strokeStyle = k === "a" ? `hsla(${280 + j * 10}, 90%, 70%, ${0.7 - j * 0.15})` : `hsla(${180 + j * 10}, 90%, 70%, ${0.5 - j * 0.1})`;
+          ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(x, y, 18 - j * 3.5, 18 - j * 3.5, 0, time * (2 + j) + j, time * (2 + j) + j + 4.5); ctx.stroke();
+        }
+      }
+    }
+    // cup
+    const [cx, cy] = cupPos(time);
+    if (L.cup.orbit) { const [px, py] = bodyPos(L.bodies[L.cup.orbit.around], time); ctx.strokeStyle = "#ffd16622"; ctx.setLineDash([2, 6]); ctx.beginPath(); ctx.arc(px, py, L.cup.orbit.dist, 0, 7); ctx.stroke(); ctx.setLineDash([]); }
+    const pulse = 1 + Math.sin(time * 4) * 0.08;
+    const cg = ctx.createRadialGradient(cx, cy, 0, cx, cy, 40);
+    cg.addColorStop(0, "#ffd16655"); cg.addColorStop(1, "#ffd16600");
+    ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(cx, cy, 40, 0, 7); ctx.fill();
+    ctx.fillStyle = "#000"; ctx.beginPath(); ctx.arc(cx, cy, 13 * pulse, 0, 7); ctx.fill();
+    ctx.strokeStyle = "#ffd166"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(cx, cy, 14 * pulse, 0, 7); ctx.stroke();
+    ctx.strokeStyle = "#ffd166aa"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(cx, cy - 14); ctx.lineTo(cx, cy - 42); ctx.stroke();
+    ctx.fillStyle = "#ffd166"; ctx.beginPath(); ctx.moveTo(cx, cy - 42); ctx.lineTo(cx + 16, cy - 36 + Math.sin(time * 5) * 2); ctx.lineTo(cx, cy - 30); ctx.fill();
+
+    for (const b of L.bodies) { const [x, y] = bodyPos(b, time); planet(b, x, y); }
+
+    // tee marker
+    ctx.strokeStyle = "#ffffff33"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(L.tee[0], L.tee[1], 12, 0, 7); ctx.stroke();
+
+    // trail
+    for (let i = 1; i < trail.length; i++) {
+      ctx.strokeStyle = `rgba(160, 220, 255, ${i / trail.length * 0.6})`; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(trail[i - 1][0], trail[i - 1][1]); ctx.lineTo(trail[i][0], trail[i][1]); ctx.stroke();
+    }
+
+    // ball
+    let bx = ball.x, by = ball.y;
+    if (ball.rest) [bx, by] = restPos(ball.rest, time);
+    if (state === "sheet") { sinkAnim = Math.min(1, sinkAnim + 0.04); bx += (cx - bx) * sinkAnim; by += (cy - by) * sinkAnim; }
+    const r = BALL * (1 - sinkAnim * 0.9);
+    const bg = ctx.createRadialGradient(bx - 2, by - 2, 0, bx, by, r);
+    bg.addColorStop(0, "#ffffff"); bg.addColorStop(1, "#b8d4ff");
+    ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(bx, by, r, 0, 7); ctx.fill();
+
+    // aim + short predicted path
+    const v = aimVec();
+    if (v && state === "aim") {
+      const p = { x: bx, y: by, vx: v[0], vy: v[1] };
+      const pow = Math.hypot(v[0], v[1]) / MAXPOW;
+      ctx.strokeStyle = `hsl(${50 - pow * 50}, 100%, 65%)`; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + v[0] * 0.09, by + v[1] * 0.09); ctx.stroke();
+      ctx.fillStyle = "#ffffffaa";
+      let t = time;
+      for (let i = 0; i < 70; i++) {
+        let ev = null;
+        for (let s = 0; s < 4 && !ev; s++) { ev = step(p, t, 1 / 240, false); t += 1 / 240; }
+        if (ev && ev !== "worm") break;
+        if (i % 3 === 0) { ctx.globalAlpha = 1 - i / 70; ctx.beginPath(); ctx.arc(p.x, p.y, 2, 0, 7); ctx.fill(); }
+      }
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = "#ffffffcc"; ctx.font = "12px IBM Plex Mono, monospace";
+      ctx.fillText(Math.round(pow * 100) + "%", bx + 14, by - 14);
+    }
+  }
+
+  // ----- loop -----
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    time += dt;
+    if (state === "fly") {
+      const sub = 8, h = dt / sub;
+      for (let s = 0; s < sub; s++) {
+        const ev = step(ball, time - dt + h * s, h, true);
+        if (ev === "sun") { penalty("Burned up"); break; }
+        if (ev === "lost") { penalty("Lost in space"); break; }
+        if (ev === "sink") { sink(); break; }
+        if (ev === "rest") { state = "aim"; trail = []; break; }
+        if (ev === "worm") trail = [];
+      }
+      if (state === "fly") {
+        flight += dt;
+        trail.push([ball.x, ball.y]); if (trail.length > 90) trail.shift();
+        if (flight > 14) penalty("Stuck in orbit");
+      }
+    }
+    draw();
+    requestAnimationFrame(frame);
+  }
+  load(0);
+  requestAnimationFrame(frame);
+
+  // expose for automated solvability checks
+  function simulate(rest, vx, vy, t0) {
+    const [x, y] = restPos(rest, t0);
+    const p = { x, y, vx, vy }; let t = t0;
+    for (let k = 0; k < 14 * 240; k++) {
+      const ev = step(p, t, 1 / 240, true); t += 1 / 240;
+      if (ev && ev !== "worm") return { ev, rest: p.rest, t };
+    }
+    return { ev: "orbit", t };
+  }
+  window.__orbit = { LEVELS, setLevel: i => { L = LEVELS[i]; }, simulate, MAXPOW };
+})();
+</script>
+</body>
+</html>
