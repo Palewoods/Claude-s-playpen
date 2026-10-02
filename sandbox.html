@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sandbox</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+  /* Layout: full-bleed pixel world, a single tool rail along the bottom. */
+  :root {
+    --bg: #17130f;
+    --rail: #221c16;
+    --ink: #efe6d8;
+    --muted: #9c8f7d;
+    --edge: #3a3027;
+    --focus: #ffcf6e;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--ink); font: 13px/1.4 var(--mono);
+    display: grid; grid-template-rows: 1fr auto; overflow: hidden;
+    touch-action: none; user-select: none;
+  }
+  #stage { position: relative; min-height: 0; display: grid; place-items: center; }
+  canvas {
+    image-rendering: pixelated; image-rendering: crisp-edges;
+    width: 100%; height: 100%; display: block; cursor: crosshair;
+  }
+  .rail {
+    background: var(--rail); border-top: 1px solid var(--edge);
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+    display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center;
+  }
+  .els { display: flex; flex-wrap: wrap; gap: 6px; }
+  .el {
+    font: inherit; color: var(--ink); background: transparent;
+    border: 1px solid var(--edge); border-radius: 4px; padding: 6px 10px 6px 8px;
+    display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+  }
+  .el i { width: 10px; height: 10px; border-radius: 2px; display: block; }
+  .el[aria-pressed="true"] { border-color: var(--ink); background: #ffffff12; }
+  .el kbd { color: var(--muted); font-size: 11px; }
+  button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .ctl { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+  .ctl input { accent-color: var(--focus); width: 90px; }
+  .spacer { flex: 1; }
+  .act { font: inherit; color: var(--ink); background: transparent; border: 0; padding: 6px 4px; cursor: pointer; text-decoration: underline; text-decoration-color: var(--edge); text-underline-offset: 3px; }
+  .act:hover { text-decoration-color: var(--ink); }
+  .home { color: var(--muted); text-decoration: none; }
+  .home:hover { color: var(--ink); }
+  #count { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 9ch; }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="c" aria-label="Falling sand simulation. Drag to pour the selected element."></canvas></div>
+<div class="rail">
+  <a class="home" href="index.html">&larr; playpen</a>
+  <div class="els" id="els" role="toolbar" aria-label="Elements"></div>
+  <label class="ctl" for="brush">brush <input id="brush" type="range" min="1" max="12" value="4"></label>
+  <span class="spacer"></span>
+  <span id="count"></span>
+  <button class="act" id="pause" type="button">pause</button>
+  <button class="act" id="clear" type="button">clear</button>
+  <button class="act" id="demo" type="button">reset scene</button>
+</div>
+<script>
+(() => {
+  // ----- element table -----
+  const EMPTY = 0, SAND = 1, WATER = 2, STONE = 3, PLANT = 4, FIRE = 5, STEAM = 6, OIL = 7, SMOKE = 8, LAVA = 9;
+  const PALETTE = {
+    [EMPTY]: [23, 19, 15],
+    [SAND]:  [222, 186, 120],
+    [WATER]: [70, 130, 210],
+    [STONE]: [128, 120, 112],
+    [PLANT]: [92, 170, 84],
+    [FIRE]:  [255, 140, 40],
+    [STEAM]: [190, 200, 215],
+    [OIL]:   [96, 62, 40],
+    [SMOKE]: [70, 64, 60],
+    [LAVA]:  [235, 80, 30],
+  };
+  // density: heavier things sink through lighter fluids
+  const DENSITY = { [EMPTY]: 0, [STEAM]: 0, [SMOKE]: 0, [FIRE]: 0, [OIL]: 1, [WATER]: 2, [LAVA]: 3, [SAND]: 4 };
+  const TOOLS = [
+    { id: SAND, name: "sand" }, { id: WATER, name: "water" }, { id: OIL, name: "oil" },
+    { id: STONE, name: "stone" }, { id: PLANT, name: "plant" }, { id: FIRE, name: "fire" },
+    { id: LAVA, name: "lava" }, { id: EMPTY, name: "erase" },
+  ];
+
+  const canvas = document.getElementById("c");
+  const ctx = canvas.getContext("2d");
+  let W, H, grid, shade, life, stamp, img, px, tick = 0;
+
+  function size() {
+    const stage = document.getElementById("stage").getBoundingClientRect();
+    const cell = Math.max(3, Math.round(Math.sqrt((stage.width * stage.height) / 60000)));
+    const nW = Math.max(60, Math.floor(stage.width / cell));
+    const nH = Math.max(40, Math.floor(stage.height / cell));
+    if (nW === W && nH === H) return false;
+    const old = grid, oW = W, oH = H, oShade = shade, oLife = life;
+    W = nW; H = nH;
+    grid = new Uint8Array(W * H); shade = new Uint8Array(W * H);
+    life = new Uint8Array(W * H); stamp = new Uint16Array(W * H);
+    for (let i = 0; i < shade.length; i++) shade[i] = (Math.random() * 255) | 0;
+    if (old) { // keep what fits, anchored to the floor
+      for (let y = 0; y < Math.min(H, oH); y++)
+        for (let x = 0; x < Math.min(W, oW); x++) {
+          const s = (oH - 1 - y) * oW + x, d = (H - 1 - y) * W + x;
+          grid[d] = old[s]; shade[d] = oShade[s]; life[d] = oLife[s];
+        }
+    }
+    canvas.width = W; canvas.height = H;
+    img = ctx.createImageData(W, H); px = img.data;
+    return true;
+  }
+
+  // per-tick stamp so a cell that moved this tick isn't updated twice
+  const mark = () => (tick % 65535) + 1;
+  const idx = (x, y) => y * W + x;
+  const inb = (x, y) => x >= 0 && x < W && y >= 0 && y < H;
+  const get = (x, y) => inb(x, y) ? grid[idx(x, y)] : STONE;
+
+  function set(x, y, t, l = 0) {
+    const i = idx(x, y);
+    grid[i] = t; life[i] = l; stamp[i] = mark();
+  }
+  function swap(a, b) {
+    const t = grid[a]; grid[a] = grid[b]; grid[b] = t;
+    const s = shade[a]; shade[a] = shade[b]; shade[b] = s;
+    const l = life[a]; life[a] = life[b]; life[b] = l;
+    const f = mark();
+    stamp[a] = f; stamp[b] = f;
+  }
+  // try to move cell i into (x,y) if the target is lighter than what we are
+  function tryMove(i, x, y, dens) {
+    if (!inb(x, y)) return false;
+    const j = idx(x, y), t = grid[j];
+    if (t === STONE || t === PLANT) return false;
+    const d = DENSITY[t];
+    if (d === undefined || d >= dens) return false;
+    swap(i, j); return true;
+  }
+
+  function powder(i, x, y, dens) {
+    if (tryMove(i, x, y + 1, dens)) return;
+    const dir = Math.random() < 0.5 ? -1 : 1;
+    if (tryMove(i, x + dir, y + 1, dens)) return;
+    tryMove(i, x - dir, y + 1, dens);
+  }
+
+  function liquid(i, x, y, dens, spread) {
+    if (tryMove(i, x, y + 1, dens)) return;
+    const dir = Math.random() < 0.5 ? -1 : 1;
+    if (tryMove(i, x + dir, y + 1, dens)) return;
+    if (tryMove(i, x - dir, y + 1, dens)) return;
+    // spread sideways a few cells, stop at the first obstacle
+    let cx = x, ci = i;
+    for (let s = 0; s < spread; s++) {
+      const nx = cx + dir;
+      if (!inb(nx, y)) break;
+      const j = idx(nx, y), d = DENSITY[grid[j]];
+      if (d === undefined || d >= dens) break;
+      swap(ci, j); ci = j; cx = nx;
+    }
+  }
+
+  function gas(i, x, y, decayTo) {
+    if (life[i] > 0) life[i]--;
+    if (life[i] === 0) { grid[i] = decayTo(); return; }
+    const dx = (Math.random() * 3 | 0) - 1;
+    const nx = x + dx, ny = y - 1;
+    if (inb(nx, ny) && grid[idx(nx, ny)] === EMPTY) { swap(i, idx(nx, ny)); return; }
+    const sx = x + (Math.random() < 0.5 ? -1 : 1);
+    if (inb(sx, y) && grid[idx(sx, y)] === EMPTY) swap(i, idx(sx, y));
+  }
+
+  const N8 = [[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]];
+
+  function step() {
+    tick++;
+    const flag = mark();
+    const ltr = tick & 1;
+    for (let y = H - 1; y >= 0; y--) {
+      for (let k = 0; k < W; k++) {
+        const x = ltr ? k : W - 1 - k;
+        const i = y * W + x;
+        const t = grid[i];
+        if (t === EMPTY || t === STONE || stamp[i] === flag) continue;
+        switch (t) {
+          case SAND: powder(i, x, y, DENSITY[SAND]); break;
+          case WATER: liquid(i, x, y, DENSITY[WATER], 4); break;
+          case OIL: liquid(i, x, y, DENSITY[OIL], 3); break;
+          case LAVA: {
+            // lava is slow and sets things alight
+            for (const [dx, dy] of N8) {
+              const nx = x + dx, ny = y + dy;
+              if (!inb(nx, ny)) continue;
+              const j = idx(nx, ny), n = grid[j];
+              if (n === WATER) { set(nx, ny, STEAM, 60 + (Math.random() * 60 | 0)); if (Math.random() < 0.15) { grid[i] = STONE; stamp[i] = flag; break; } }
+              else if ((n === PLANT || n === OIL) && Math.random() < 0.2) set(nx, ny, FIRE, 20 + (Math.random() * 30 | 0));
+              else if (n === SAND && Math.random() < 0.002) set(nx, ny, STONE);
+            }
+            if (grid[i] === LAVA && Math.random() < 0.5) liquid(i, x, y, DENSITY[LAVA], 1);
+            break;
+          }
+          case PLANT: {
+            if (Math.random() < 0.06) {
+              const [dx, dy] = N8[Math.random() * 8 | 0];
+              const nx = x + dx, ny = y + dy;
+              if (inb(nx, ny) && grid[idx(nx, ny)] === WATER) set(nx, ny, PLANT);
+            }
+            break;
+          }
+          case FIRE: {
+            for (const [dx, dy] of N8) {
+              const nx = x + dx, ny = y + dy;
+              if (!inb(nx, ny)) continue;
+              const n = grid[idx(nx, ny)];
+              if (n === PLANT && Math.random() < 0.08) set(nx, ny, FIRE, 25 + (Math.random() * 30 | 0));
+              else if (n === OIL && Math.random() < 0.35) set(nx, ny, FIRE, 40 + (Math.random() * 40 | 0));
+              else if (n === WATER) { set(nx, ny, STEAM, 60 + (Math.random() * 60 | 0)); grid[i] = EMPTY; break; }
+            }
+            if (grid[i] !== FIRE) break;
+            gas(i, x, y, () => Math.random() < 0.4 ? SMOKE : EMPTY);
+            break;
+          }
+          case STEAM: gas(i, x, y, () => Math.random() < 0.35 ? WATER : EMPTY); break;
+          case SMOKE: gas(i, x, y, () => EMPTY); break;
+        }
+      }
+    }
+    // give freshly spawned smoke a lifetime
+    for (let i = 0; i < grid.length; i++) {
+      if (grid[i] === SMOKE && life[i] === 0) life[i] = 30 + (Math.random() * 40 | 0);
+      if (grid[i] === FIRE && life[i] === 0) life[i] = 20 + (Math.random() * 20 | 0);
+      if (grid[i] === STEAM && life[i] === 0) life[i] = 80 + (Math.random() * 80 | 0);
+    }
+  }
+
+  function render() {
+    let n = 0;
+    for (let i = 0, p = 0; i < grid.length; i++, p += 4) {
+      const t = grid[i];
+      let [r, g, b] = PALETTE[t];
+      if (t !== EMPTY) {
+        n++;
+        const v = (shade[i] / 255 - 0.5);
+        if (t === FIRE) {
+          const k = Math.random();
+          r = 255; g = 90 + k * 140; b = 20 + k * 40;
+        } else if (t === LAVA) {
+          const k = (Math.sin(tick * 0.08 + shade[i]) + 1) / 2;
+          r = 220 + k * 35; g = 60 + k * 70; b = 20;
+        } else if (t === WATER) {
+          const k = Math.sin(tick * 0.05 + shade[i] * 0.1) * 8;
+          r += v * 20; g += v * 20 + k; b += v * 10 + k;
+        } else {
+          const amp = t === SAND ? 34 : t === STONE ? 30 : 26;
+          r += v * amp; g += v * amp; b += v * amp;
+        }
+      } else {
+        // faint vertical gradient so the void has depth
+        const y = (i / W) | 0;
+        const k = y / H;
+        r = 23 + k * 6; g = 19 + k * 5; b = 15 + k * 4;
+      }
+      px[p] = r; px[p + 1] = g; px[p + 2] = b; px[p + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    countEl.textContent = n.toLocaleString() + " px";
+  }
+
+  // ----- painting -----
+  let tool = SAND, brush = 4, painting = false, last = null, paused = false;
+  const countEl = document.getElementById("count");
+
+  function paintAt(gx, gy) {
+    const r = brush;
+    for (let dy = -r; dy <= r; dy++)
+      for (let dx = -r; dx <= r; dx++) {
+        if (dx * dx + dy * dy > r * r) continue;
+        const x = gx + dx, y = gy + dy;
+        if (!inb(x, y)) continue;
+        const i = idx(x, y);
+        if (tool === EMPTY) { grid[i] = EMPTY; life[i] = 0; continue; }
+        if (grid[i] !== EMPTY && tool !== STONE) continue;
+        const solid = tool === STONE || tool === PLANT;
+        if (!solid && Math.random() > 0.45) continue;
+        grid[i] = tool; shade[i] = Math.random() * 255 | 0;
+        life[i] = tool === FIRE ? 30 + (Math.random() * 40 | 0) : 0;
+      }
+  }
+
+  function toGrid(e) {
+    const r = canvas.getBoundingClientRect();
+    return [Math.floor((e.clientX - r.left) / r.width * W), Math.floor((e.clientY - r.top) / r.height * H)];
+  }
+  function stroke(e) {
+    const [gx, gy] = toGrid(e);
+    if (last) { // interpolate so fast drags leave a continuous line
+      const [lx, ly] = last, steps = Math.max(Math.abs(gx - lx), Math.abs(gy - ly));
+      for (let s = 1; s <= steps; s++) paintAt(Math.round(lx + (gx - lx) * s / steps), Math.round(ly + (gy - ly) * s / steps));
+    } else paintAt(gx, gy);
+    last = [gx, gy];
+  }
+  canvas.addEventListener("pointerdown", e => { painting = true; last = null; canvas.setPointerCapture(e.pointerId); stroke(e); });
+  canvas.addEventListener("pointermove", e => { if (painting) stroke(e); });
+  addEventListener("pointerup", () => { painting = false; last = null; });
+  // keep pouring while the pointer is held still
+  let hold = null;
+  canvas.addEventListener("pointerdown", e => { hold = e; });
+  canvas.addEventListener("pointermove", e => { if (painting) hold = e; });
+  addEventListener("pointerup", () => { hold = null; });
+
+  // ----- toolbar -----
+  const els = document.getElementById("els");
+  TOOLS.forEach((t, n) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "el"; b.dataset.id = t.id;
+    const [r, g, bl] = t.id === EMPTY ? [60, 52, 44] : PALETTE[t.id];
+    b.innerHTML = `<i style="background:rgb(${r},${g},${bl})"></i>${t.name} <kbd>${n + 1}</kbd>`;
+    b.addEventListener("click", () => pick(t.id));
+    els.appendChild(b);
+  });
+  function pick(id) {
+    tool = id;
+    for (const b of els.children) b.setAttribute("aria-pressed", String(+b.dataset.id === id));
+  }
+  pick(SAND);
+  document.getElementById("brush").addEventListener("input", e => brush = +e.target.value);
+  const pauseBtn = document.getElementById("pause");
+  pauseBtn.addEventListener("click", () => { paused = !paused; pauseBtn.textContent = paused ? "play" : "pause"; });
+  document.getElementById("clear").addEventListener("click", () => { grid.fill(0); life.fill(0); });
+  document.getElementById("demo").addEventListener("click", scene);
+  addEventListener("keydown", e => {
+    const n = parseInt(e.key, 10);
+    if (n >= 1 && n <= TOOLS.length) pick(TOOLS[n - 1].id);
+    if (e.key === " ") { e.preventDefault(); pauseBtn.click(); }
+  });
+
+  // ----- a starting scene so the world isn't empty -----
+  function fillRect(x0, y0, x1, y1, t, p = 1) {
+    for (let y = Math.max(0, y0); y < Math.min(H, y1); y++)
+      for (let x = Math.max(0, x0); x < Math.min(W, x1); x++)
+        if (Math.random() < p) { const i = idx(x, y); grid[i] = t; life[i] = 0; }
+  }
+  function scene() {
+    grid.fill(0); life.fill(0);
+    const f = H - 1;
+    // basin on the left
+    fillRect(0, f - 2, W, f + 1, STONE);
+    fillRect(Math.floor(W * 0.05), Math.floor(H * 0.55), Math.floor(W * 0.07), f, STONE);
+    fillRect(Math.floor(W * 0.38), Math.floor(H * 0.6), Math.floor(W * 0.40), f, STONE);
+    fillRect(Math.floor(W * 0.07), Math.floor(H * 0.72), Math.floor(W * 0.38), f - 2, WATER);
+    fillRect(Math.floor(W * 0.07), Math.floor(H * 0.66), Math.floor(W * 0.38), Math.floor(H * 0.72), OIL, 0.9);
+    // plant fringe at the pool's edge
+    fillRect(Math.floor(W * 0.07), Math.floor(H * 0.86), Math.floor(W * 0.10), f - 2, PLANT);
+    // sand dune on the right
+    for (let x = Math.floor(W * 0.45); x < W; x++) {
+      const h = Math.max(0, Math.sin((x - W * 0.45) / (W * 0.55) * Math.PI) * H * 0.35);
+      fillRect(x, Math.floor(f - 2 - h), x + 1, f - 2, SAND);
+    }
+    // floating ledge with a little lava pool
+    const lx = Math.floor(W * 0.55), ly = Math.floor(H * 0.25);
+    fillRect(lx, ly, lx + Math.floor(W * 0.2), ly + 2, STONE);
+    fillRect(lx, ly - 4, lx + 2, ly, STONE);
+    fillRect(lx + Math.floor(W * 0.2) - 2, ly - 4, lx + Math.floor(W * 0.2), ly, STONE);
+    fillRect(lx + 2, ly - 3, lx + Math.floor(W * 0.2) - 2, ly, LAVA);
+    for (let i = 0; i < shade.length; i++) shade[i] = Math.random() * 255 | 0;
+  }
+
+  // ----- loop -----
+  size(); scene();
+  addEventListener("resize", () => { size(); });
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function frame() {
+    if (hold && painting) stroke(hold);
+    if (!paused) { step(); if (!reduce) step(); }
+    render();
+    requestAnimationFrame(frame);
+  }
+  frame();
+})();
+</script>
+</body>
+</html>

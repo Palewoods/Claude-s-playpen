@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Claude's Playpen</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;800&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400&display=swap">
+<style>
+  /* Layout: a toy shelf — big name, one-paragraph welcome, a 2x2 shelf of live windows into each toy. */
+  :root {
+    --bg: #eef0f6;
+    --ink: #191c2e;
+    --muted: #5b6180;
+    --line: #d3d8e8;
+    --shelf: #ffffff;
+    --accent: #3346d3;
+    --display: "Unbounded", "Arial Black", system-ui, sans-serif;
+    --body: "Atkinson Hyperlegible", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #11131d; --ink: #e9ebf7; --muted: #9399b8; --line: #262a3e; --shelf: #181b29; --accent: #8e9cff; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #11131d; --ink: #e9ebf7; --muted: #9399b8; --line: #262a3e; --shelf: #181b29; --accent: #8e9cff; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.55 var(--body); padding-inline: 16px; padding-block: 48px 56px; }
+  .wrap { max-width: 1040px; margin: 0 auto; display: grid; gap: 40px; }
+  header { display: grid; gap: 16px; }
+  .eyebrow { font: 12px var(--mono); color: var(--muted); letter-spacing: 0.06em; }
+  h1 {
+    font: 800 clamp(40px, 9vw, 104px)/0.92 var(--display); margin: 0; letter-spacing: -0.03em;
+    text-wrap: balance;
+  }
+  h1 .sq { color: var(--accent); }
+  .lede { max-width: 60ch; margin: 0; color: var(--muted); }
+  .lede b { color: var(--ink); font-weight: 700; }
+  .shelf { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 20px; }
+  a.toy {
+    color: inherit; text-decoration: none; background: var(--shelf); border: 1px solid var(--line);
+    border-radius: 14px; overflow: hidden; display: grid; grid-template-rows: auto 1fr;
+    transition: transform 0.18s ease, border-color 0.18s ease;
+  }
+  a.toy:hover { transform: translateY(-3px); border-color: var(--muted); }
+  a.toy:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+  .win { aspect-ratio: 16 / 9; max-width: 100%; position: relative; background: #17130f; }
+  .win canvas { width: 100%; height: 100%; display: block; image-rendering: auto; }
+  .win canvas.px { image-rendering: pixelated; }
+  .meta { padding: 16px 18px 18px; display: grid; gap: 6px; align-content: start; }
+  .meta h2 { font: 500 20px/1.2 var(--display); margin: 0; letter-spacing: -0.01em; }
+  .meta p { margin: 0; color: var(--muted); font-size: 15.5px; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px 14px; font: 12px var(--mono); color: var(--muted); margin-top: 6px; }
+  .tags span::before { content: "· "; color: var(--accent); }
+  footer { border-top: 1px solid var(--line); padding-top: 20px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 24px; color: var(--muted); font-size: 14px; }
+  footer code { font: 13px var(--mono); }
+  @media (prefers-reduced-motion: reduce) { a.toy { transition: none; } a.toy:hover { transform: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="eyebrow">palewoods/claude-s-playpen · 4 toys · 0 dependencies</span>
+    <h1>Claude's Playpen<span class="sq">.</span></h1>
+    <p class="lede">You said <b>"go wild"</b>, so here are four small things I wanted to make. Each one is a single HTML file with no build step: open it and play. They're all live below, so pick whichever one is moving in the most interesting way.</p>
+  </header>
+
+  <main class="shelf">
+    <a class="toy" href="sandbox.html">
+      <div class="win"><canvas class="px" data-preview="sand" width="160" height="90"></canvas></div>
+      <div class="meta">
+        <h2>Sandbox</h2>
+        <p>A falling-sand world. Pour water on lava to make stone, float oil on a pond and set it alight, or grow plants that drink everything nearby.</p>
+        <div class="tags"><span>8 elements</span><span>drag to pour</span><span>keys 1–8</span></div>
+      </div>
+    </a>
+    <a class="toy" href="murmuration.html">
+      <div class="win"><canvas data-preview="birds"></canvas></div>
+      <div class="meta">
+        <h2>Murmuration</h2>
+        <p>A thousand starlings at dusk, each one watching only its nearest neighbours. Your pointer is a hawk. Fly through them and watch the flock fold around you.</p>
+        <div class="tags"><span>boids</span><span>up to 2,400 birds</span><span>tunable flocking</span></div>
+      </div>
+    </a>
+    <a class="toy" href="life-sequencer.html">
+      <div class="win"><canvas data-preview="life"></canvas></div>
+      <div class="meta">
+        <h2>Life Sequencer</h2>
+        <p>A step sequencer that rewrites its own melody. At the end of every bar, Conway's Game of Life takes one step and the tune slowly evolves.</p>
+        <div class="tags"><span>sound on</span><span>16 × 12 grid</span><span>5 scales</span></div>
+      </div>
+    </a>
+    <a class="toy" href="semicolon.html">
+      <div class="win"><canvas data-preview="text"></canvas></div>
+      <div class="meta">
+        <h2>The Lost Semicolon</h2>
+        <p>A tiny text adventure. You fell out of line 42 and the build is about to run. Get past the Linter, survive node_modules, and find your way home.</p>
+        <div class="tags"><span>parser game</span><span>50 points</span><span>a duck helps</span></div>
+      </div>
+    </a>
+  </main>
+
+  <footer>
+    <span>Made by Claude, for someone who said "go wild".</span>
+    <span>Turn on GitHub Pages for this repo and it's a website. Or just open <code>index.html</code>.</span>
+  </footer>
+</div>
+<script>
+(() => {
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const dpr = Math.min(2, devicePixelRatio || 1);
+
+  function fit(c) {
+    if (c.dataset.preview === "sand") return; // fixed pixel grid
+    const r = c.getBoundingClientRect();
+    c.width = Math.max(1, r.width * dpr); c.height = Math.max(1, r.height * dpr);
+  }
+
+  // --- sand: a tiny pour onto a hill, recycled when full ---
+  function sand(c) {
+    const ctx = c.getContext("2d"), W = c.width, H = c.height;
+    const g = new Uint8Array(W * H), sh = new Uint8Array(W * H).map(() => Math.random() * 255);
+    const img = ctx.createImageData(W, H);
+    let t = 0;
+    function reset() { g.fill(0); for (let x = 0; x < W; x++) for (let y = H - 3; y < H; y++) g[y * W + x] = 2; for (let x = 18; x < 60; x++) g[(H - 30) * W + x] = 2; }
+    reset();
+    return () => {
+      t++;
+      for (let k = 0; k < 3; k++) {
+        const x1 = (W * 0.32 + Math.sin(t * 0.02) * 10) | 0, x2 = (W * 0.7 + Math.cos(t * 0.017) * 14) | 0;
+        if (!g[x1]) g[x1] = 1; if (!g[W + x2]) g[W + x2] = 3;
+      }
+      for (let y = H - 2; y >= 0; y--) {
+        const l = (t + y) & 1;
+        for (let k = 0; k < W; k++) {
+          const x = l ? k : W - 1 - k, i = y * W + x, v = g[i];
+          if (v !== 1 && v !== 3) continue;
+          const d = i + W;
+          if (!g[d]) { g[d] = v; g[i] = 0; continue; }
+          const dir = Math.random() < 0.5 ? -1 : 1;
+          if (x + dir >= 0 && x + dir < W && !g[d + dir]) { g[d + dir] = v; g[i] = 0; continue; }
+          if (v === 3) { // water spreads sideways
+            if (x + dir >= 0 && x + dir < W && !g[i + dir]) { g[i + dir] = v; g[i] = 0; }
+          }
+        }
+      }
+      if (t % 1400 === 0) reset();
+      const p = img.data;
+      for (let i = 0; i < g.length; i++) {
+        const v = g[i], s = (sh[i] / 255 - 0.5), o = i * 4;
+        let c3 = v === 1 ? [222 + s * 30, 186 + s * 30, 120 + s * 30] : v === 2 ? [128 + s * 26, 120 + s * 26, 112 + s * 26] : v === 3 ? [70, 130 + s * 14, 210] : [23, 19 + (i / W / H) * 4, 15];
+        p[o] = c3[0]; p[o + 1] = c3[1]; p[o + 2] = c3[2]; p[o + 3] = 255;
+      }
+      ctx.putImageData(img, 0, 0);
+    };
+  }
+
+  // --- birds: a small flock circling a moving point ---
+  function birds(c) {
+    const ctx = c.getContext("2d"); const N = 160; const b = [];
+    for (let i = 0; i < N; i++) b.push({ x: Math.random(), y: Math.random() * 0.6, vx: (Math.random() - 0.5) * 0.004, vy: (Math.random() - 0.5) * 0.004, d: 0.6 + Math.random() * 0.6 });
+    let t = 0;
+    return () => {
+      const W = c.width, H = c.height; t += 0.01;
+      const g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, "#23264f"); g.addColorStop(0.5, "#6d4a78"); g.addColorStop(0.8, "#c4687a"); g.addColorStop(1, "#f1a873");
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      const tx = 0.5 + Math.sin(t) * 0.25, ty = 0.4 + Math.sin(t * 1.7) * 0.12;
+      let mx = 0, my = 0, ax = 0, ay = 0;
+      for (const p of b) { mx += p.x; my += p.y; ax += p.vx; ay += p.vy; }
+      mx /= N; my /= N; ax /= N; ay /= N;
+      ctx.fillStyle = "#14102a";
+      for (const p of b) {
+        p.vx += (tx - p.x) * 0.00012 + (mx - p.x) * 0.0004 + (ax - p.vx) * 0.04 + (Math.random() - 0.5) * 0.0003;
+        p.vy += (ty - p.y) * 0.00012 + (my - p.y) * 0.0004 + (ay - p.vy) * 0.04 + (Math.random() - 0.5) * 0.0003;
+        const s = Math.hypot(p.vx, p.vy), m = 0.0045;
+        if (s > m) { p.vx *= m / s; p.vy *= m / s; }
+        p.x += p.vx * p.d; p.y += p.vy * p.d;
+        ctx.globalAlpha = 0.5 + p.d * 0.4;
+        ctx.fillRect(p.x * W, p.y * H, 2.2 * p.d * dpr, 1.6 * p.d * dpr);
+      }
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = "#1a1428"; ctx.fillRect(0, H * 0.92, W, H * 0.08);
+    };
+  }
+
+  // --- life: the sequencer grid with a sweeping playhead ---
+  function life(c) {
+    const ctx = c.getContext("2d"), C = 16, R = 9;
+    let g = new Uint8Array(C * R).map(() => Math.random() < 0.3 ? 1 : 0), col = 0, tick = 0;
+    const step = () => {
+      const n = new Uint8Array(C * R);
+      for (let r = 0; r < R; r++) for (let q = 0; q < C; q++) {
+        let k = 0;
+        for (let dr = -1; dr <= 1; dr++) for (let dq = -1; dq <= 1; dq++) if (dr || dq) k += g[((r + dr + R) % R) * C + (q + dq + C) % C];
+        n[r * C + q] = k === 3 || (k === 2 && g[r * C + q]) ? 1 : 0;
+      }
+      if (!n.some(Boolean) || n.every((v, i) => v === g[i])) g = new Uint8Array(C * R).map(() => Math.random() < 0.3 ? 1 : 0); else g = n;
+    };
+    return () => {
+      tick++;
+      if (tick % 7 === 0) { col = (col + 1) % C; if (col === 0) step(); }
+      const W = c.width, H = c.height;
+      ctx.fillStyle = "#0e1424"; ctx.fillRect(0, 0, W, H);
+      const gap = 3 * dpr, cw = (W - gap * (C + 1)) / C, chh = (H - gap * (R + 1)) / R;
+      for (let r = 0; r < R; r++) for (let q = 0; q < C; q++) {
+        const on = g[r * C + q], hot = on && q === col;
+        ctx.fillStyle = hot ? "#fff3a8" : on ? "#7ef0d0" : q === col ? "#2b3961" : "#1e2844";
+        ctx.fillRect(gap + q * (cw + gap), gap + r * (chh + gap), cw, chh);
+      }
+    };
+  }
+
+  // --- text: the adventure typing itself ---
+  function text(c) {
+    const ctx = c.getContext("2d");
+    const script = [
+      ["sys", "THE LOST SEMICOLON"],
+      ["out", "You are lying in the gutter of main.js."],
+      ["out", "You are a semicolon, and you have fallen"],
+      ["out", "out of line 42."],
+      ["cmd", "> east"],
+      ["out", "The Linter blocks the way, arms folded."],
+      ["cmd", "> talk to linter"],
+      ["out", "\"Nothing gets in until the tests pass.\""],
+      ["cmd", "> talk to duck"],
+      ["out", "The duck says nothing. But you realise..."],
+    ];
+    let shown = 0, chars = 0, hold = 0;
+    return () => {
+      const W = c.width, H = c.height;
+      const dark = matchMedia("(prefers-color-scheme: dark)").matches && document.documentElement.dataset.theme !== "light" || document.documentElement.dataset.theme === "dark";
+      ctx.fillStyle = dark ? "#1c1a29" : "#fbfaff"; ctx.fillRect(0, 0, W, H);
+      const fs = Math.max(9, Math.min(15, W / 34));
+      ctx.font = `${fs}px "JetBrains Mono", ui-monospace, monospace`;
+      const lh = fs * 1.55, pad = fs * 1.2, maxLines = Math.floor((H - pad) / lh);
+      const start = Math.max(0, shown + 1 - maxLines);
+      for (let i = start; i <= Math.min(shown, script.length - 1); i++) {
+        const [k, s] = script[i], y = pad + (i - start) * lh + fs * 0.4;
+        ctx.fillStyle = dark ? "#8f88ad" : "#7a7494"; ctx.globalAlpha = 0.6;
+        ctx.fillText(String(i + 1).padStart(2, " "), pad * 0.6, y);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = k === "cmd" ? (dark ? "#a892ff" : "#6b4fd8") : k === "sys" ? (dark ? "#ff7fb0" : "#b8326b") : (dark ? "#e6e2f5" : "#24203a");
+        const txt = i === shown ? s.slice(0, chars) : s;
+        ctx.fillText(txt, pad * 0.6 + fs * 2.6, y);
+        if (i === shown && Math.floor(performance.now() / 450) % 2) ctx.fillRect(pad * 0.6 + fs * 2.6 + ctx.measureText(txt).width + 2, y - fs * 0.8, fs * 0.55, fs);
+      }
+      if (shown < script.length) {
+        if (chars < script[shown][1].length) chars += script[shown][0] === "cmd" ? 0.35 : 0.9;
+        else if (++hold > 26) { shown++; chars = 0; hold = 0; }
+      } else if (++hold > 160) { shown = 0; chars = 0; hold = 0; }
+      chars = Math.min(chars, (script[shown] || [0, ""])[1].length);
+    };
+  }
+
+  const kinds = { sand, birds, life, text };
+  const live = [];
+  document.querySelectorAll("canvas[data-preview]").forEach(c => {
+    fit(c);
+    const draw = kinds[c.dataset.preview](c);
+    const entry = { c, draw, visible: true };
+    live.push(entry);
+    // warm up so the first still frame already shows something
+    for (let i = 0; i < (c.dataset.preview === "text" ? 400 : 120); i++) draw();
+  });
+  addEventListener("resize", () => live.forEach(e => fit(e.c)));
+  const io = new IntersectionObserver(es => es.forEach(x => { const e = live.find(l => l.c === x.target); if (e) e.visible = x.isIntersecting; }));
+  live.forEach(e => io.observe(e.c));
+  if (!reduce) (function loop() { live.forEach(e => e.visible && e.draw()); requestAnimationFrame(loop); })();
+})();
+</script>
+</body>
+</html>

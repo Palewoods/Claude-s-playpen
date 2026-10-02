@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Life Sequencer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@300;500;700&display=swap">
+<style>
+  /* Layout: an instrument faceplate — readout strip, the 16x12 pad grid, a row of rotary-style selects. */
+  :root {
+    --bg: #0e1424;
+    --plate: #151d33;
+    --cell: #1e2844;
+    --lit: #7ef0d0;
+    --hot: #fff3a8;
+    --ink: #d9e2f5;
+    --muted: #7e8bab;
+    --edge: #2a3658;
+    --mono: "Martian Mono", ui-monospace, Menlo, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background: var(--bg); color: var(--ink); font: 300 12px/1.5 var(--mono);
+    padding-inline: 16px; padding-block: 20px 32px;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; display: grid; gap: 18px; }
+  header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px 20px; }
+  h1 { font-weight: 700; font-size: clamp(18px, 3vw, 24px); margin: 0; letter-spacing: 0.02em; text-transform: uppercase; }
+  h1 span { color: var(--lit); }
+  a.home { color: var(--muted); text-decoration: none; }
+  a.home:hover { color: var(--ink); }
+  .plate { background: var(--plate); border: 1px solid var(--edge); border-radius: 10px; padding: 16px; display: grid; gap: 14px; }
+  .readout { display: flex; flex-wrap: wrap; gap: 6px 22px; color: var(--muted); font-variant-numeric: tabular-nums; text-transform: uppercase; letter-spacing: 0.08em; font-size: 10px; }
+  .readout b { color: var(--ink); font-weight: 500; font-size: 12px; letter-spacing: 0; margin-left: 6px; }
+  .grid-wrap { overflow-x: auto; }
+  #grid {
+    display: grid; grid-template-columns: repeat(16, minmax(14px, 1fr)); gap: 4px;
+    min-width: 300px; touch-action: none;
+  }
+  .c {
+    aspect-ratio: 1; border-radius: 3px; background: var(--cell); border: 0; padding: 0;
+    cursor: pointer; transition: background-color 0.25s, box-shadow 0.25s, transform 0.1s;
+  }
+  .c:nth-child(4n+1) { background: #232e4e; }
+  .c.on { background: var(--lit); box-shadow: 0 0 10px #7ef0d066; }
+  .c.col { filter: brightness(1.35); }
+  .c.on.col { background: var(--hot); box-shadow: 0 0 16px #fff3a8aa; transform: scale(1.08); transition: none; }
+  .c:focus-visible { outline: 2px solid var(--hot); outline-offset: 1px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: end; }
+  .field { display: grid; gap: 4px; }
+  .field label { color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-size: 10px; }
+  select, input[type=range] { font: inherit; color: var(--ink); background: var(--cell); border: 1px solid var(--edge); border-radius: 6px; padding: 6px 8px; accent-color: var(--lit); }
+  input[type=range] { padding: 0; width: 120px; background: transparent; border: 0; height: 30px; }
+  button.b {
+    font: 500 12px var(--mono); color: var(--ink); background: var(--cell); border: 1px solid var(--edge);
+    border-radius: 6px; padding: 8px 14px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  button.b:hover { border-color: var(--muted); }
+  button.b.primary { background: var(--lit); color: var(--bg); border-color: var(--lit); min-width: 9ch; }
+  button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--hot); outline-offset: 2px; }
+  .toggle { display: inline-flex; gap: 8px; align-items: center; cursor: pointer; color: var(--ink); padding-block: 8px; }
+  .toggle input { accent-color: var(--lit); width: 16px; height: 16px; margin: 0; }
+  .note { color: var(--muted); max-width: 70ch; margin: 0; }
+  .note b { color: var(--ink); font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Life <span>Sequencer</span></h1>
+    <a class="home" href="index.html">&larr; playpen</a>
+  </header>
+
+  <section class="plate" aria-label="Sequencer">
+    <div class="readout" aria-live="off">
+      <span>gen<b id="gen">0</b></span>
+      <span>alive<b id="pop">0</b></span>
+      <span>bar<b id="bar">1</b></span>
+      <span>step<b id="stepno">01</b></span>
+      <span>state<b id="state">stopped</b></span>
+    </div>
+    <div class="grid-wrap"><div id="grid" role="grid" aria-label="16 steps by 12 pitches. Click cells to toggle them."></div></div>
+    <div class="controls">
+      <button class="b primary" id="play" type="button">play</button>
+      <div class="field"><label for="tempo">tempo <span id="bpm">96</span> bpm</label><input id="tempo" type="range" min="50" max="180" value="96"></div>
+      <div class="field"><label for="scale">scale</label>
+        <select id="scale">
+          <option value="minor">minor pentatonic</option>
+          <option value="major">major pentatonic</option>
+          <option value="insen">in-sen</option>
+          <option value="dorian">dorian</option>
+          <option value="whole">whole tone</option>
+        </select>
+      </div>
+      <div class="field"><label for="voice">voice</label>
+        <select id="voice">
+          <option value="glass">glass</option>
+          <option value="pluck">pluck</option>
+          <option value="reed">reed</option>
+        </select>
+      </div>
+      <div class="field"><label for="every">evolve every</label>
+        <select id="every">
+          <option value="0">never</option>
+          <option value="1" selected>1 bar</option>
+          <option value="2">2 bars</option>
+          <option value="4">4 bars</option>
+        </select>
+      </div>
+      <label class="toggle" for="reseed"><input id="reseed" type="checkbox" checked> reseed when it dies</label>
+    </div>
+    <div class="controls">
+      <button class="b" type="button" data-seed="glider">gliders</button>
+      <button class="b" type="button" data-seed="r">r-pentomino</button>
+      <button class="b" type="button" data-seed="pulsar">blinkers</button>
+      <button class="b" type="button" data-seed="random">scatter</button>
+      <button class="b" type="button" data-seed="clear">clear</button>
+    </div>
+  </section>
+
+  <p class="note">Each column is a sixteenth note; each row is a pitch, high at the top. Lit cells play when the playhead crosses them. At the end of every bar the grid takes one step of <b>Conway's Game of Life</b> on a wrapping board, so the melody slowly rewrites itself. Draw a shape, press play, and let it evolve.</p>
+</div>
+<script>
+(() => {
+  const COLS = 16, ROWS = 12;
+  const SCALES = {
+    minor: [0, 3, 5, 7, 10], major: [0, 2, 4, 7, 9], insen: [0, 1, 5, 7, 10],
+    dorian: [0, 2, 3, 5, 7, 9, 10], whole: [0, 2, 4, 6, 8, 10],
+  };
+  let cells = new Uint8Array(COLS * ROWS);
+  let gen = 0, bar = 1, step = 0, visStep = 0, playing = false;
+  const $ = id => document.getElementById(id);
+
+  // ----- grid UI -----
+  const gridEl = $("grid");
+  const btns = [];
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++) {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "c"; b.tabIndex = r === 0 && c === 0 ? 0 : -1;
+      b.setAttribute("aria-label", `step ${c + 1}, pitch ${ROWS - r}`);
+      b.dataset.i = r * COLS + c;
+      gridEl.appendChild(b); btns.push(b);
+    }
+  // drag-to-paint: the first cell decides whether we draw or erase
+  let painting = null;
+  gridEl.addEventListener("pointerdown", e => {
+    const b = e.target.closest(".c"); if (!b) return;
+    const i = +b.dataset.i; painting = cells[i] ? 0 : 1;
+    cells[i] = painting; draw(); e.preventDefault();
+  });
+  gridEl.addEventListener("pointermove", e => {
+    if (painting === null) return;
+    const b = document.elementFromPoint(e.clientX, e.clientY)?.closest?.(".c");
+    if (b && cells[+b.dataset.i] !== painting) { cells[+b.dataset.i] = painting; draw(); }
+  });
+  addEventListener("pointerup", () => painting = null);
+  gridEl.addEventListener("keydown", e => {
+    const b = e.target.closest(".c"); if (!b) return;
+    const i = +b.dataset.i; let r = (i / COLS) | 0, c = i % COLS;
+    if (e.key === "Enter" || e.key === " ") { cells[i] ^= 1; draw(); e.preventDefault(); return; }
+    if (e.key === "ArrowRight") c = (c + 1) % COLS; else if (e.key === "ArrowLeft") c = (c + COLS - 1) % COLS;
+    else if (e.key === "ArrowDown") r = (r + 1) % ROWS; else if (e.key === "ArrowUp") r = (r + ROWS - 1) % ROWS;
+    else return;
+    e.preventDefault(); b.tabIndex = -1; const nb = btns[r * COLS + c]; nb.tabIndex = 0; nb.focus();
+  });
+
+  function draw() {
+    let pop = 0;
+    for (let i = 0; i < cells.length; i++) {
+      const on = !!cells[i]; pop += on;
+      btns[i].classList.toggle("on", on);
+      btns[i].classList.toggle("col", playing && i % COLS === visStep);
+      btns[i].setAttribute("aria-pressed", String(on));
+    }
+    $("gen").textContent = gen; $("pop").textContent = pop; $("bar").textContent = bar;
+    $("stepno").textContent = String(visStep + 1).padStart(2, "0");
+  }
+
+  // ----- life -----
+  function evolve() {
+    const nx = new Uint8Array(cells.length);
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++) {
+        let k = 0;
+        for (let dr = -1; dr <= 1; dr++)
+          for (let dc = -1; dc <= 1; dc++) {
+            if (!dr && !dc) continue;
+            k += cells[((r + dr + ROWS) % ROWS) * COLS + (c + dc + COLS) % COLS];
+          }
+        const i = r * COLS + c;
+        nx[i] = (k === 3 || (k === 2 && cells[i])) ? 1 : 0;
+      }
+    const same = nx.every((v, i) => v === cells[i]);
+    cells = nx; gen++;
+    const empty = !cells.some(Boolean);
+    if ($("reseed").checked && (empty || same)) seed("random", true);
+  }
+
+  function place(shape, r0, c0) {
+    shape.forEach(([r, c]) => { cells[((r0 + r) % ROWS) * COLS + (c0 + c) % COLS] = 1; });
+  }
+  function seed(kind, keepGen) {
+    cells = new Uint8Array(COLS * ROWS);
+    if (!keepGen) gen = 0;
+    const glider = [[0, 1], [1, 2], [2, 0], [2, 1], [2, 2]];
+    if (kind === "glider") { place(glider, 1, 1); place(glider, 6, 9); place([[0,0],[0,1],[0,2]], 9, 3); }
+    else if (kind === "r") place([[0, 1], [0, 2], [1, 0], [1, 1], [2, 1]], 4, 6);
+    else if (kind === "pulsar") { place([[0,0],[0,1],[0,2]], 2, 2); place([[0,0],[1,0],[2,0]], 1, 8); place([[0,0],[0,1],[0,2]], 7, 11); place([[0,1],[1,2],[2,0],[2,1],[2,2]], 6, 3); }
+    else if (kind === "random") for (let i = 0; i < cells.length; i++) cells[i] = Math.random() < 0.24 ? 1 : 0;
+    draw();
+  }
+  document.querySelectorAll("[data-seed]").forEach(b => b.addEventListener("click", () => seed(b.dataset.seed)));
+
+  // ----- audio -----
+  let ac = null, master, delay, fb, wet, lp;
+  function initAudio() {
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+    master = ac.createGain(); master.gain.value = 0.5;
+    lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 5200;
+    delay = ac.createDelay(1.5); fb = ac.createGain(); fb.gain.value = 0.38;
+    wet = ac.createGain(); wet.gain.value = 0.32;
+    const comp = ac.createDynamicsCompressor();
+    master.connect(lp); lp.connect(comp); comp.connect(ac.destination);
+    master.connect(delay); delay.connect(fb); fb.connect(delay); delay.connect(wet); wet.connect(lp);
+  }
+  function freq(row) {
+    const sc = SCALES[$("scale").value];
+    const deg = ROWS - 1 - row; // bottom row is the lowest note
+    const oct = Math.floor(deg / sc.length), semi = sc[deg % sc.length] + oct * 12;
+    return 110 * Math.pow(2, (semi + 3) / 12); // rooted on C3
+  }
+  function note(f, t, voices) {
+    const v = $("voice").value;
+    const g = ac.createGain();
+    const lvl = 0.22 / Math.sqrt(voices);
+    const o = ac.createOscillator();
+    let dur;
+    if (v === "glass") {
+      o.type = "sine"; dur = 1.6;
+      const o2 = ac.createOscillator(), g2 = ac.createGain();
+      o2.type = "sine"; o2.frequency.value = f * 3.01; g2.gain.value = 0.18;
+      o2.connect(g2); g2.connect(g); o2.start(t); o2.stop(t + dur);
+    } else if (v === "pluck") { o.type = "triangle"; dur = 0.5; }
+    else { o.type = "sawtooth"; dur = 0.7; }
+    o.frequency.value = f;
+    let out = o;
+    if (v === "reed") {
+      const f2 = ac.createBiquadFilter(); f2.type = "lowpass"; f2.Q.value = 6;
+      f2.frequency.setValueAtTime(f * 6, t); f2.frequency.exponentialRampToValueAtTime(f * 1.5, t + dur);
+      o.connect(f2); out = f2;
+    }
+    out.connect(g); g.connect(master);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(lvl, t + (v === "reed" ? 0.04 : 0.006));
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.start(t); o.stop(t + dur + 0.05);
+  }
+
+  // look-ahead scheduler: audio is timed by the audio clock, visuals follow
+  let nextTime = 0, timer = null;
+  const sixteenth = () => 60 / +$("tempo").value / 4;
+  function schedule() {
+    while (nextTime < ac.currentTime + 0.12) {
+      const col = step;
+      const active = [];
+      for (let r = 0; r < ROWS; r++) if (cells[r * COLS + col]) active.push(r);
+      active.forEach(r => note(freq(r), nextTime, active.length));
+      delay.delayTime.setValueAtTime(sixteenth() * 3, nextTime);
+      const at = nextTime;
+      setTimeout(() => { if (playing) { visStep = col; draw(); } }, Math.max(0, (at - ac.currentTime) * 1000));
+      nextTime += sixteenth();
+      step = (step + 1) % COLS;
+      if (step === 0) {
+        const every = +$("every").value;
+        if (every && bar % every === 0) evolve();
+        bar++;
+      }
+    }
+  }
+  $("play").addEventListener("click", async () => {
+    if (!ac) initAudio();
+    if (ac.state === "suspended") await ac.resume();
+    playing = !playing;
+    $("play").textContent = playing ? "stop" : "play";
+    $("state").textContent = playing ? "playing" : "stopped";
+    if (playing) { nextTime = ac.currentTime + 0.05; timer = setInterval(schedule, 25); schedule(); }
+    else { clearInterval(timer); draw(); }
+  });
+  $("tempo").addEventListener("input", e => $("bpm").textContent = e.target.value);
+  addEventListener("keydown", e => { if (e.key === " " && !e.target.closest(".c, button, select, input")) { e.preventDefault(); $("play").click(); } });
+
+  seed("glider");
+})();
+</script>
+</body>
+</html>

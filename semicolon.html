@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Lost Semicolon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,600;1,400&family=Fraunces:opsz,wght@9..144,600&display=swap">
+<style>
+  /* Layout: an editor window — gutter of line numbers on the left, the story scrolls as the buffer, prompt at the bottom. */
+  :root {
+    --bg: #f3f1fa;
+    --paper: #fbfaff;
+    --ink: #24203a;
+    --muted: #7a7494;
+    --gutter: #e7e3f3;
+    --accent: #6b4fd8;
+    --keyword: #b8326b;
+    --string: #2c7a5b;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    --display: "Fraunces", Georgia, serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15131f; --paper: #1c1a29; --ink: #e6e2f5; --muted: #8f88ad; --gutter: #232035;
+      --accent: #a892ff; --keyword: #ff7fb0; --string: #7fd8ae; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #15131f; --paper: #1c1a29; --ink: #e6e2f5; --muted: #8f88ad; --gutter: #232035;
+    --accent: #a892ff; --keyword: #ff7fb0; --string: #7fd8ae; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--ink); font: 14px/1.65 var(--mono); padding-inline: 16px; padding-block: 16px; }
+  .win {
+    max-width: 780px; height: 100%; margin: 0 auto; background: var(--paper);
+    border: 1px solid var(--gutter); border-radius: 10px; display: grid; grid-template-rows: auto 1fr auto; overflow: hidden;
+  }
+  .tab { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 14px; border-bottom: 1px solid var(--gutter); color: var(--muted); font-size: 12px; }
+  .tab .name { color: var(--ink); }
+  .tab .name::before { content: "\25CF "; color: var(--keyword); }
+  .tab a { color: var(--muted); text-decoration: none; }
+  .tab a:hover { color: var(--ink); }
+  .stats { font-variant-numeric: tabular-nums; }
+  #log { overflow-y: auto; padding: 14px 0; counter-reset: ln; min-height: 0; }
+  .line { display: grid; grid-template-columns: 4.5ch 1fr; gap: 14px; padding-right: 16px; }
+  .line::before { counter-increment: ln; content: counter(ln); color: var(--muted); opacity: 0.6; text-align: right; font-size: 12px; padding-top: 2px; }
+  .line > div { min-width: 0; overflow-wrap: anywhere; }
+  .room { font: 600 20px/1.3 var(--display); margin-top: 10px; }
+  .cmd { color: var(--accent); }
+  .cmd::before { content: "> "; }
+  .sys { color: var(--muted); font-style: italic; }
+  .win-msg { color: var(--string); font-weight: 600; }
+  .k { color: var(--keyword); }
+  .s { color: var(--string); }
+  code { font: inherit; background: var(--gutter); padding: 0 4px; border-radius: 3px; }
+  form { display: flex; gap: 10px; align-items: center; border-top: 1px solid var(--gutter); padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); }
+  form label { color: var(--accent); font-weight: 600; }
+  #in { flex: 1; min-width: 0; font: inherit; color: var(--ink); background: transparent; border: 0; outline: none; caret-color: var(--keyword); }
+  form:focus-within { box-shadow: inset 0 2px 0 var(--accent); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 16px 10px; }
+  .chips button { font: 12px var(--mono); color: var(--muted); background: transparent; border: 1px solid var(--gutter); border-radius: 999px; padding: 3px 10px; cursor: pointer; }
+  .chips button:hover { color: var(--ink); border-color: var(--muted); }
+  .chips button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .foot { display: grid; }
+</style>
+</head>
+<body>
+<div class="win">
+  <div class="tab">
+    <span class="name" id="where">main.js</span>
+    <span class="stats" id="stats">moves 0 · score 0/50</span>
+    <a href="index.html">&larr; playpen</a>
+  </div>
+  <div id="log" aria-live="polite"></div>
+  <div class="foot">
+    <form id="f" autocomplete="off">
+      <label for="in">&gt;</label>
+      <input id="in" type="text" spellcheck="false" autocapitalize="off" placeholder="look, go north, take duck, help…">
+    </form>
+    <div class="chips" id="chips" aria-label="Quick commands"></div>
+  </div>
+</div>
+<script>
+(() => {
+  const log = document.getElementById("log");
+  const input = document.getElementById("in");
+
+  function out(html, cls = "") {
+    const line = document.createElement("div"); line.className = "line";
+    const body = document.createElement("div"); if (cls) body.className = cls;
+    body.innerHTML = html; line.appendChild(body); log.appendChild(line);
+    log.scrollTop = log.scrollHeight;
+  }
+  const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+  // ----- world -----
+  const S = {
+    room: "gutter", inv: new Set(), moves: 0, score: 0, awarded: new Set(),
+    gitFound: false, bugFixed: false, testsPass: false, linterMoved: false, won: false,
+    maze: 0, duckTalks: 0, stashPopped: false,
+  };
+  const MAZE = ["down", "west", "down", "east", "down"];
+
+  const items = {
+    duck: { name: "rubber duck", where: "readme", take: true,
+      desc: "A small yellow rubber duck. It has the patient expression of something that has heard every bug explained twice." },
+    lock: { name: "package-lock.json", where: "root", take: false,
+      desc: "An enormous file. Most of it is hashes. One line near the bottom looks hand-written, and you could <b>read</b> it." },
+    backspace: { name: "backspace key", where: "maze-end", take: true,
+      desc: "A worn keycap marked ⌫. It hums faintly with the power of deletion." },
+    head: { name: "detached HEAD", where: "git", take: true,
+      desc: "It's pointing at a commit from 2019 and refuses to say why. It stares at you. You find this unsettling." },
+    todo: { name: "ancient TODO", where: "git", take: true,
+      desc: "A comment reading <code>// TODO: fix this properly later</code>. The blame says it is six years old. Later never came." },
+    colon: { name: "colon", where: null, take: true,
+      desc: "It looks just like you, minus the comma-ish tail. A cousin, maybe. It does not want to talk about it." },
+  };
+
+  const rooms = {
+    gutter: {
+      name: "The Gutter",
+      desc: () => `You are lying in the gutter of <span class="k">main.js</span>, between the line numbers and the code. Line 41 looms above you. From somewhere to the <b>east</b> you can hear the build server warming up. You are a semicolon, and you have fallen out of line 42.`,
+      exits: { east: "main" },
+    },
+    main: {
+      name: "main.js, line 42",
+      desc: () => `Line 42 reads <code><span class="k">const</span> answer = add(<span class="s">2</span>, <span class="s">2</span>)</code> and ends in a small, semicolon-shaped hole. ` +
+        (S.linterMoved
+          ? `The Linter has stepped aside and is pretending to review a different file. The hole is waiting for you. You could <b>enter</b> it.`
+          : `Standing in front of it is <b>the Linter</b>, arms folded, wearing a hi-vis vest covered in squiggly red underlines.`) +
+        ` The project root is <b>south</b>; the gutter is <b>west</b>.`,
+      exits: { west: "gutter", south: "root" },
+    },
+    root: {
+      name: "Project Root",
+      desc: () => `The top of the repository. Signposts point everywhere: <b>north</b> to main.js, <b>east</b> to README.md, <b>west</b> to tests/, <b>south</b> to utils.js, and <b>down</b> into node_modules/, which is breathing heavily. ` +
+        `A colossal <b>package-lock.json</b> lies here like a beached whale.` +
+        (S.gitFound ? ` A hidden doorway marked <b>.git</b> leads <b>up</b>.` : ` The floor feels as if it hides more than <code>ls</code> shows.`),
+      exits: () => Object.assign({ north: "main", east: "readme", west: "tests", south: "utils", down: "maze" }, S.gitFound ? { up: "git" } : {}),
+    },
+    readme: {
+      name: "README.md",
+      desc: () => `A sunny, optimistic room full of badges claiming the build is passing. It hasn't been passing since Tuesday. ` +
+        `Install instructions on the wall end with <i>"and then it should just work."</i> The root is <b>west</b>.`,
+      exits: { west: "root" },
+    },
+    tests: {
+      name: "tests/",
+      desc: () => `A sterile white room. On a lectern sits <code>add.test.js</code>: <code>expect(add(<span class="s">2</span>, <span class="s">2</span>)).toBe(<span class="s">4</span>)</code>. ` +
+        (S.testsPass ? `A green tick glows above it.` : `A red cross flickers above it. A big button on the wall says <b>RUN TESTS</b>.`) +
+        ` The root is <b>east</b>.`,
+      exits: { east: "root" },
+    },
+    utils: {
+      name: "utils.js",
+      desc: () => `A cramped utility closet. Bolted to the wall is the function <code><span class="k">function</span> add(a, b) { <span class="k">return</span> a + b${S.bugFixed ? "" : ' <b>+ <span class="s">1</span></b>'}; }</code>. ` +
+        (S.bugFixed ? `It looks clean and slightly embarrassed.` : `The <b>+ 1</b> at the end is smirking at you.`) + ` The root is <b>north</b>.`,
+      exits: { north: "root" },
+    },
+    maze: {
+      name: "node_modules/",
+      desc: () => `You are in a maze of twisty little dependencies, all alike. Folders branch <b>down</b>, <b>east</b> and <b>west</b>. ` +
+        `Depth ${S.maze + 1}. ${["A sign reads: is-even (depends on is-odd).", "A sign reads: is-odd (depends on is-even).", "A tiny package called left-pad sleeps here, guarded by thousands of dependents.", "Something deep below is clicking, like a keyboard.", "The air smells of fresh keycaps."][S.maze] || ""} ` +
+        `<b>Up</b> leads back to the root.`,
+      exits: {},
+    },
+    "maze-end": {
+      name: "node_modules/.bin/keyboard",
+      desc: () => `The bottom of node_modules. Nobody has been here since the last <code>npm install</code>. A pile of spare keycaps covers the floor. <b>Up</b> leads all the way back to the root.`,
+      exits: { up: "root" },
+    },
+    git: {
+      name: ".git",
+      desc: () => `A vault where every past version of the project hangs on hooks, labelled with hashes. It's quiet in a way that suggests a lot of things were rebased here. ` +
+        `A drawer marked <b>stash</b> is set into the wall. <b>Down</b> returns to the root.`,
+      exits: { down: "root" },
+    },
+  };
+
+  const DIRS = { n: "north", s: "south", e: "east", w: "west", u: "up", d: "down", north: "north", south: "south", east: "east", west: "west", up: "up", down: "down" };
+
+  function award(key, pts, why) {
+    if (S.awarded.has(key)) return;
+    S.awarded.add(key); S.score += pts;
+    out(`+${pts} · ${why}`, "sys");
+  }
+  function here(id) { return items[id].where === S.room; }
+  function itemsHere() { return Object.keys(items).filter(here); }
+
+  function look() {
+    const r = rooms[S.room];
+    out(r.name, "room");
+    out(r.desc());
+    const vis = itemsHere().filter(id => items[id].take);
+    if (vis.length) out("You see: " + vis.map(id => `<b>${items[id].name}</b>`).join(", ") + ".");
+    if (S.room === "readme" && here("duck")) out(`The duck sits on a stack of unread docs, waiting.`, "sys");
+    document.getElementById("where").textContent = r.name;
+  }
+
+  function go(dir) {
+    if (S.room === "maze") {
+      if (dir === "up") { S.maze = 0; S.room = "root"; look(); return; }
+      if (!["down", "east", "west"].includes(dir)) { out("Only <b>down</b>, <b>east</b>, <b>west</b> or <b>up</b> from here."); return; }
+      if (dir === MAZE[S.maze]) {
+        S.maze++;
+        if (S.maze >= MAZE.length) { S.room = "maze-end"; S.maze = 0; award("maze", 10, "you reached the bottom of node_modules"); look(); return; }
+        out("You squeeze through a folder full of polyfills. It feels like progress.");
+      } else {
+        S.maze = 0;
+        out(`You wander into <code>node_modules/node_modules/node_modules/</code> and lose your way. A circular dependency gently returns you to where you started.`);
+      }
+      look(); return;
+    }
+    const ex = typeof rooms[S.room].exits === "function" ? rooms[S.room].exits() : rooms[S.room].exits;
+    if (S.room === "main" && dir === "north") { out("North of line 42 is line 41, which is busy. Line 41 is always busy."); return; }
+    if (!ex[dir]) { out(`You can't go ${dir} from here.`); return; }
+    if (ex[dir] === "maze") S.maze = 0;
+    S.room = ex[dir]; look();
+  }
+
+  function take(id) {
+    if (!id) { out("Take what?"); return; }
+    if (!here(id)) { out(S.inv.has(id) ? "You already have it." : "You don't see that here."); return; }
+    if (!items[id].take) { out(id === "lock" ? "You try to lift package-lock.json. It weighs 40 megabytes. You decide to leave it." : "It won't budge."); return; }
+    items[id].where = null; S.inv.add(id);
+    out(`Taken: ${items[id].name}.`);
+    if (id === "duck") out("The duck looks pleased. You can <b>talk to duck</b> whenever you're stuck.", "sys");
+    if (id === "backspace") award("backspace", 5, "you found the backspace key");
+    if (id === "head") award("head", 3, "you picked up a detached HEAD, which is usually a mistake");
+    if (id === "todo") award("todo", 3, "you rescued a six-year-old TODO");
+  }
+  function drop(id) {
+    if (!id || !S.inv.has(id)) { out("You aren't carrying that."); return; }
+    S.inv.delete(id); items[id].where = S.room; out(`Dropped: ${items[id].name}.`);
+  }
+
+  function examine(id, raw) {
+    if (id && (S.inv.has(id) || here(id))) { out(items[id].desc); return; }
+    if (/linter/.test(raw) && S.room === "main") { out(S.linterMoved ? "The Linter is whistling and avoiding eye contact." : "The Linter is very tall and very strict. Its badge reads: <code>no-unsafe-semicolons</code>. It looks at you, then at the failing test report clipped to its vest."); return; }
+    if (/(\+ ?1|plus|function|add|bug)/.test(raw) && S.room === "utils") { out(S.bugFixed ? "<code>return a + b;</code> Correct, finally." : "An off-by-one error. Someone added it to \"fix\" a test, then fixed the test, then forgot. Classic."); return; }
+    if (/(test|lectern|button)/.test(raw) && S.room === "tests") { out("The test is simple and correct. The code under test is not."); return; }
+    if (/(badge|readme|wall)/.test(raw) && S.room === "readme") { out("One badge reads <b>coverage: 104%</b>. You decide not to ask."); return; }
+    if (/(stash|drawer)/.test(raw) && S.room === "git") { out("A drawer marked stash. You could <b>git stash pop</b> it."); return; }
+    if (/(hole|line|42)/.test(raw) && S.room === "main") { out("A semicolon-shaped hole. It's exactly your size."); return; }
+    if (/(self|me|myself|semicolon)/.test(raw)) { out("You are a semicolon: a dot on top, a comma underneath. Small, often forgotten, structurally important."); return; }
+    if (!raw) { look(); return; }
+    out("You see nothing special about that.");
+  }
+
+  function read(id, raw) {
+    if (id === "lock" && here("lock")) {
+      out(`You scroll for a very long time. Near the bottom, in a different font, someone has written:`);
+      out(`<code>"resolved": "down, west, down, east, down" // how to find the keyboard in node_modules</code>`);
+      award("lock", 5, "you read the package-lock, which nobody does");
+      return;
+    }
+    if (S.room === "readme") { out(`"<i>To find the hidden directories, list <b>all</b> files: <code>ls -a</code>. To fix bugs, explain them to a duck.</i>"`); return; }
+    if (S.room === "tests") { out(`<code>expect(add(2, 2)).toBe(4)</code>. Last run: <code>Expected 4, received 5</code>.`); return; }
+    if (id && (S.inv.has(id) || here(id))) { out(items[id].desc); return; }
+    out("There's nothing to read here.");
+  }
+
+  function runTests() {
+    if (S.room !== "tests") { out("You need to be in tests/ to press the button."); return; }
+    if (S.bugFixed) {
+      if (!S.testsPass) { S.testsPass = true; award("tests", 5, "tests pass"); }
+      out(`<span class="s">✓ add(2, 2) returns 4</span><br>1 passed, 0 failed. Far away, you hear the Linter's radio crackle.`);
+    } else {
+      out(`<span class="k">✗ add(2, 2) → expected 4, received 5</span><br>0 passed, 1 failed. The red cross flickers smugly.`);
+    }
+  }
+
+  function use(id, raw) {
+    if (!id) { out("Use what?"); return; }
+    if (!S.inv.has(id)) { out("You don't have that."); return; }
+    if (id === "backspace") {
+      if (S.room === "utils" && !S.bugFixed) {
+        S.bugFixed = true;
+        out(`You press the backspace key. <code>+ 1</code> → <code>+ </code> → <code>+</code> → gone. The function exhales.`);
+        award("fix", 5, "you deleted the off-by-one");
+      } else if (S.room === "utils") out("There's nothing left to delete. Don't get carried away.");
+      else out("You press backspace. Nothing here deserves it.");
+      return;
+    }
+    if (id === "duck") { talkDuck(); return; }
+    if (id === "head") { out("You try to check out the detached HEAD. You are now in 2019. You quickly check back out. Nobody saw."); return; }
+    if (id === "todo") { out("You try to do the TODO. It's much bigger than it looked. You put it back in your pocket."); return; }
+    out("Nothing happens.");
+  }
+
+  function talkDuck() {
+    if (!S.inv.has("duck") && !here("duck")) { out("There's no duck here to talk to."); return; }
+    S.duckTalks++;
+    let hint;
+    if (S.linterMoved) hint = "The hole on line 42 is clear. Go and <b>enter</b> it.";
+    else if (S.testsPass) hint = "Tests are green. Go and show the Linter at line 42.";
+    else if (S.bugFixed) hint = "You fixed utils.js. Now go to tests/ and <b>run tests</b>.";
+    else if (S.inv.has("backspace")) hint = "You have a backspace key. Something in utils.js has an extra character or two.";
+    else if (S.awarded.has("lock")) hint = "The package-lock gave you a path through node_modules: down, west, down, east, down.";
+    else if (S.duckTalks === 1) hint = "Let's start at the beginning. Why won't the Linter let you in? Try <b>talk to linter</b>.";
+    else hint = "That off-by-one in utils.js needs deleting, but you need something to delete it with. Lock files remember everything.";
+    out(`You explain the whole problem to the duck, out loud, in order. The duck says nothing. But halfway through, you realise: ${hint}`);
+    award("duck", 2, "rubber duck debugging works");
+  }
+
+  function talk(raw) {
+    if (/duck/.test(raw)) { talkDuck(); return; }
+    if (/linter/.test(raw) && S.room === "main") {
+      if (S.linterMoved) { out("The Linter nods once. That's as warm as it gets."); return; }
+      if (S.testsPass) {
+        S.linterMoved = true;
+        out(`You show the Linter the green test report. It squints at it, holds it up to the light, and grudgingly steps aside. "Fine. But I'm watching your spacing."`);
+        award("linter", 3, "the Linter steps aside");
+      } else {
+        out(`"Line 42 calls <code>add(2, 2)</code>, and its test is failing," says the Linter. "Nothing gets committed to this line until the tests pass. Rules are rules."`);
+      }
+      return;
+    }
+    out("Nobody here wants to talk.");
+  }
+
+  function enter(raw) {
+    if (S.room !== "main") { out("There's nothing here to enter."); return; }
+    if (!S.linterMoved) { out(`You make a run for the hole. The Linter catches you mid-air with one hand. "<i>Tests first.</i>"`); return; }
+    S.won = true;
+    out(`You climb into the hole at the end of line 42 and click into place.<br><code><span class="k">const</span> answer = add(<span class="s">2</span>, <span class="s">2</span>);</code>`);
+    out(`The build server roars. CI turns green. Somewhere a developer, who will never know you existed, sighs with relief and goes to lunch.`, "win-msg");
+    out(`You finished in ${S.moves} moves with ${S.score} of 50 points.${S.score < 50 ? " Some secrets are still hidden. Type <b>restart</b> to play again." : " A perfect run. You are the most well-placed semicolon in the codebase."}`, "sys");
+  }
+
+  function inventory() {
+    if (!S.inv.size) { out("You are carrying nothing but your own punctuation."); return; }
+    out("You carry: " + [...S.inv].map(id => items[id].name).join(", ") + ".");
+  }
+
+  function help() {
+    out(`Commands: <b>look</b>, <b>go</b> north/south/east/west/up/down (or just <b>n</b>, <b>s</b>…), <b>take</b> / <b>drop</b> X, <b>examine</b> X, <b>read</b> X, <b>use</b> X, <b>talk to</b> X, <b>inventory</b>, <b>hint</b>, <b>restart</b>. Some developer commands work too.`);
+  }
+
+  // noun resolution: match words in the input to item ids
+  const NOUNS = [
+    [/duck/, "duck"], [/(lock|package)/, "lock"], [/(backspace|key|⌫)/, "backspace"],
+    [/head/, "head"], [/todo/, "todo"], [/colon/, "colon"],
+  ];
+  function noun(raw) { for (const [re, id] of NOUNS) if (re.test(raw)) return id; return null; }
+
+  function parse(raw) {
+    const s = raw.trim().toLowerCase().replace(/\s+/g, " ");
+    if (!s) return;
+    out(esc(raw.trim()), "cmd");
+    if (S.won && !/^(restart|reset|new game)$/.test(s)) { out("You're home. Type <b>restart</b> to play again.", "sys"); return; }
+    S.moves++;
+    const [verb, ...restArr] = s.split(" ");
+    const rest = restArr.join(" ");
+    const id = noun(rest);
+
+    if (/^ls -a|^ls -la|^ls -al/.test(s)) {
+      if (S.room === "root") {
+        if (!S.gitFound) { S.gitFound = true; out("A hidden directory appears: <b>.git</b>, leading <b>up</b>."); award("git", 5, "you found the hidden .git directory"); }
+        else out(".git is still there, leading up.");
+      } else out("You list everything here. Nothing hidden, just what you see.");
+      return;
+    }
+    if (/^ls$/.test(s)) { look(); return; }
+    if (/^git stash pop/.test(s) || (/^(open|pop)/.test(s) && /stash|drawer/.test(s))) {
+      if (S.room !== "git") { out("<code>fatal: not a git repository</code>. You need to be inside .git for that."); return; }
+      if (S.stashPopped) { out("<code>No stash entries found.</code>"); return; }
+      S.stashPopped = true; S.inv.add("colon");
+      out("The stash drawer springs open. Inside is a lost semicolon! No, wait. It's a colon. Close, but no. You take it anyway out of sympathy.");
+      award("stash", 4, "you popped the stash");
+      return;
+    }
+    if (/^(npm test|npm run test|run tests?|press button|push button|press run|test)$/.test(s)) { runTests(); return; }
+    if (/^(rm -rf|sudo)/.test(s)) { out("The Linter appears out of nowhere, shakes its head slowly, and disappears again."); return; }
+    if (/^(git push --force|git push -f)/.test(s)) { out("A cold wind blows through the repository. Somewhere a colleague's work quietly disappears. Let's not."); return; }
+    if (/^(hello|hi|hey)$/.test(s)) { out("Hello! You're a semicolon. You don't have a mouth, but the sentiment is appreciated."); return; }
+    if (/^(xyzzy|plugh)$/.test(s)) { out("A hollow voice says: <i>wrong game, but nice try</i>."); return; }
+
+    if (DIRS[verb] && !rest) { go(DIRS[verb]); return; }
+    switch (verb) {
+      case "go": case "walk": case "move": case "cd":
+        if (verb === "cd" && rest === "..") { go(S.room === "git" ? "down" : S.room === "maze" || S.room === "maze-end" ? "up" : S.room === "main" ? "south" : S.room === "readme" ? "west" : S.room === "tests" ? "east" : S.room === "utils" ? "north" : "nowhere"); return; }
+        if (verb === "cd" && /node_modules/.test(rest) && S.room === "root") { go("down"); return; }
+        if (verb === "cd" && /\.git/.test(rest) && S.room === "root") { if (S.gitFound) go("up"); else out("<code>cd: no such file or directory: .git</code>. Or is there?"); return; }
+        if (DIRS[rest]) go(DIRS[rest]); else out("Go where?");
+        return;
+      case "look": case "l":
+        if (rest && rest !== "around") examine(id, rest); else look(); return;
+      case "examine": case "x": case "inspect": case "check": case "cat":
+        examine(id, rest); return;
+      case "read": read(id, rest); return;
+      case "take": case "get": case "grab": case "pick":
+        take(id); return;
+      case "drop": drop(id); return;
+      case "use": case "press": case "push":
+        if (/button|tests?/.test(rest)) { runTests(); return; }
+        use(id, rest); return;
+      case "delete": case "remove": case "backspace": case "erase":
+        if (S.inv.has("backspace")) use("backspace", rest); else out("You'd need something that can delete things."); return;
+      case "talk": case "ask": case "speak": case "explain": case "show":
+        talk(rest); return;
+      case "enter": case "insert": case "climb": case "jump": case "fill":
+        enter(rest); return;
+      case "inventory": case "i": case "inv": inventory(); return;
+      case "help": case "?": help(); return;
+      case "hint": talkDuck(); return;
+      case "restart": case "reset": restart(); return;
+      case "score": out(`Score ${S.score} of 50 after ${S.moves} moves.`); return;
+    }
+    out(`I don't know how to "${esc(verb)}". Try <b>help</b>.`);
+  }
+
+  function restart() {
+    Object.assign(S, { room: "gutter", inv: new Set(), moves: 0, score: 0, awarded: new Set(), gitFound: false, bugFixed: false, testsPass: false, linterMoved: false, won: false, maze: 0, duckTalks: 0, stashPopped: false });
+    Object.assign(items.duck, { where: "readme" }); Object.assign(items.backspace, { where: "maze-end" });
+    Object.assign(items.head, { where: "git" }); Object.assign(items.todo, { where: "git" }); Object.assign(items.colon, { where: null });
+    log.innerHTML = "";
+    intro();
+  }
+
+  function stats() { document.getElementById("stats").textContent = `moves ${S.moves} · score ${S.score}/50`; }
+
+  function intro() {
+    out(`<b>THE LOST SEMICOLON</b><br>A very small adventure in a medium-sized codebase.`, "sys");
+    look();
+    out(`Type commands below. <b>help</b> lists them. If you're stuck, find someone to explain things to.`, "sys");
+    stats();
+  }
+
+  // command history with up/down
+  const hist = []; let hp = 0;
+  document.getElementById("f").addEventListener("submit", e => {
+    e.preventDefault();
+    const v = input.value; if (!v.trim()) return;
+    hist.push(v); hp = hist.length; input.value = "";
+    parse(v); stats(); renderChips();
+  });
+  input.addEventListener("keydown", e => {
+    if (e.key === "ArrowUp" && hp > 0) { input.value = hist[--hp]; e.preventDefault(); }
+    if (e.key === "ArrowDown") { hp = Math.min(hist.length, hp + 1); input.value = hist[hp] || ""; e.preventDefault(); }
+  });
+
+  // tappable shortcuts for phones: exits from the current room plus a few verbs
+  function renderChips() {
+    const box = document.getElementById("chips"); box.innerHTML = "";
+    let ex = typeof rooms[S.room].exits === "function" ? rooms[S.room].exits() : rooms[S.room].exits;
+    if (S.room === "maze") ex = { down: 1, east: 1, west: 1, up: 1 };
+    const cmds = [...Object.keys(ex), "look", "inventory", "help"];
+    for (const c of cmds) {
+      const b = document.createElement("button"); b.type = "button"; b.textContent = c;
+      b.addEventListener("click", () => { parse(c); stats(); renderChips(); input.focus({ preventScroll: true }); });
+      box.appendChild(b);
+    }
+  }
+
+  intro(); renderChips();
+  if (matchMedia("(pointer: fine)").matches) input.focus();
+})();
+</script>
+</body>
+</html>
