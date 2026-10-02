@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lantern Keeper</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Figtree:wght@400;600;800&display=swap">
+<style>
+  /* Layout: the garden map on top at full width, a "potting bench" of towers and wave controls below it. */
+  :root {
+    --night: #0b1712;
+    --bench: #13241c;
+    --ink: #f1ecd8;
+    --muted: #93a596;
+    --glow: #ffd27a;
+    --leaf: #7fcf8a;
+    --danger: #ff7b6b;
+    --edge: #24392e;
+    --display: "Young Serif", Georgia, serif;
+    --body: "Figtree", system-ui, sans-serif;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--night); color: var(--ink); font: 400 14px/1.45 var(--body); display: grid; grid-template-rows: auto 1fr auto; overflow: hidden; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 22px; padding: 10px 16px; }
+  header h1 { font: 400 24px/1 var(--display); margin: 0; color: var(--glow); }
+  .stat { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .stat b { color: var(--ink); font-weight: 800; font-size: 16px; }
+  .stat.nectar b { color: var(--glow); } .stat.lives b { color: var(--danger); }
+  header a { margin-left: auto; color: var(--muted); text-decoration: none; }
+  header a:hover { color: var(--ink); }
+  #stage { position: relative; min-height: 0; display: grid; place-items: center; padding-inline: 16px; }
+  canvas { display: block; max-width: 100%; touch-action: none; border-radius: 10px; }
+  .bench { background: var(--bench); border-top: 1px solid var(--edge); padding: 10px 16px calc(12px + env(safe-area-inset-bottom, 0px)); display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: stretch; }
+  .towers { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tw {
+    font: inherit; color: var(--ink); background: #0f1d17; border: 1px solid var(--edge); border-radius: 10px;
+    padding: 6px 12px 6px 8px; display: grid; grid-template-columns: 34px auto; column-gap: 8px; align-items: center; cursor: pointer; text-align: left;
+  }
+  .tw canvas { grid-row: span 2; width: 34px; height: 34px; border-radius: 0; }
+  .tw b { font-weight: 800; }
+  .tw small { color: var(--glow); font-variant-numeric: tabular-nums; }
+  .tw[aria-pressed="true"] { border-color: var(--glow); box-shadow: 0 0 0 1px var(--glow) inset; }
+  .tw:disabled { opacity: 0.4; cursor: default; }
+  .info { flex: 1; min-width: 220px; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; color: var(--muted); }
+  .info b { color: var(--ink); }
+  .btn { font: 600 14px var(--body); color: var(--ink); background: transparent; border: 1px solid var(--edge); border-radius: 999px; padding: 7px 14px; cursor: pointer; }
+  .btn:hover:not(:disabled) { border-color: var(--muted); }
+  .btn:disabled { opacity: 0.4; cursor: default; }
+  .btn.go { background: var(--glow); color: #1d1606; border-color: var(--glow); font-weight: 800; }
+  .ctrls { display: flex; gap: 8px; align-items: center; margin-left: auto; }
+  :focus-visible { outline: 2px solid var(--glow); outline-offset: 2px; }
+  .over { position: absolute; inset: 0; display: grid; place-items: center; background: #0b1712d0; text-align: center; padding: 16px; }
+  .over > div { display: grid; gap: 12px; justify-items: center; max-width: 44ch; }
+  .over h2 { font: 400 44px/1 var(--display); margin: 0; color: var(--glow); }
+  .over p { margin: 0; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Lantern Keeper</h1>
+  <span class="stat">wave <b id="wave">0</b>/15</span>
+  <span class="stat nectar">nectar <b id="nectar">0</b></span>
+  <span class="stat lives">lantern <b id="lives">20</b></span>
+  <a href="index.html">&larr; playpen</a>
+</header>
+<div id="stage">
+  <canvas id="c" aria-label="Garden map. Pick a creature below, then tap an empty patch of grass to place it."></canvas>
+  <div class="over" id="over" hidden><div>
+    <h2 id="ov-t">The lantern went out</h2>
+    <p id="ov-p"></p>
+    <button class="btn go" id="again" type="button">Light it again</button>
+  </div></div>
+</div>
+<div class="bench">
+  <div class="towers" id="towers" role="toolbar" aria-label="Creatures"></div>
+  <div class="info" id="info">Moths are coming for the lantern. Pick a creature, place it beside the path, then start the first wave.</div>
+  <div class="ctrls">
+    <button class="btn" id="speed" type="button">1×</button>
+    <button class="btn go" id="next" type="button">Start wave 1</button>
+  </div>
+</div>
+<script>
+(() => {
+  const COLS = 20, ROWS = 12, TS = 48, W = COLS * TS, H = ROWS * TS, WAVES = 15;
+  const PATH = [[-1, 2], [4, 2], [4, 8], [9, 8], [9, 3], [14, 3], [14, 9], [17, 9], [17, 5], [19, 5]];
+  const $ = id => document.getElementById(id);
+
+  const TOWERS = {
+    frog:    { name: "Frog",    cost: 50,  range: 2.3, cd: 0.55, dmg: 6,  col: "#6fcf6a", desc: "quick tongue, one bug at a time" },
+    spider:  { name: "Spider",  cost: 70,  range: 2.0, cd: 1.1,  dmg: 2,  col: "#b9a7d8", desc: "webs slow everything nearby", slow: 0.5, splash: 0.9 },
+    firefly: { name: "Fireflies", cost: 100, range: 2.3, cd: 1.3, dmg: 10, col: "#ffe066", desc: "bursts of light hit a crowd", splash: 1.1 },
+    owl:     { name: "Owl",     cost: 140, range: 4.0, cd: 1.9,  dmg: 38, col: "#c99a6b", desc: "long range, picks the toughest bug", strongest: true },
+  };
+  const BUGS = {
+    moth:   { hp: 12, speed: 1.6, armor: 0, bounty: 3,  lives: 1, col: "#d9cfb8", size: 9 },
+    wasp:   { hp: 9,  speed: 3.0, armor: 0, bounty: 4,  lives: 1, col: "#f2c14e", size: 8 },
+    beetle: { hp: 44, speed: 0.9, armor: 5, bounty: 7,  lives: 2, col: "#5a7fa8", size: 11 },
+    queen:  { hp: 520, speed: 0.7, armor: 4, bounty: 60, lives: 6, col: "#e9d7ff", size: 18 },
+  };
+
+  // ----- path geometry -----
+  const pts = PATH.map(([x, y]) => [(x + 0.5) * TS, (y + 0.5) * TS]);
+  const segLen = pts.slice(1).map((p, i) => Math.hypot(p[0] - pts[i][0], p[1] - pts[i][1]));
+  const PATH_LEN = segLen.reduce((a, b) => a + b, 0);
+  function along(d) {
+    for (let i = 0; i < segLen.length; i++) {
+      if (d <= segLen[i]) { const t = d / segLen[i]; return [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * t, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * t]; }
+      d -= segLen[i];
+    }
+    return pts[pts.length - 1];
+  }
+  const blocked = new Uint8Array(COLS * ROWS);
+  for (let i = 0; i < PATH.length - 1; i++) {
+    let [x, y] = PATH[i]; const [x2, y2] = PATH[i + 1];
+    while (true) { if (x >= 0 && x < COLS) blocked[y * COLS + x] = 1; if (x === x2 && y === y2) break; x += Math.sign(x2 - x); y += Math.sign(y2 - y); }
+  }
+  const LANTERN = [19, 5];
+  blocked[LANTERN[1] * COLS + LANTERN[0]] = 1;
+
+  // ----- state -----
+  let towers, bugs, shots, puffs, nectar, lives, wave, spawning, queue, speed = 1, sel = null, picked = null, hover = null, over = false, t = 0, kills = 0;
+
+  function reset() {
+    towers = []; bugs = []; shots = []; puffs = []; queue = [];
+    nectar = 130; lives = 20; wave = 0; spawning = false; sel = null; picked = null; over = false; kills = 0;
+    $("over").hidden = true; info(); hud(); toolbar();
+  }
+
+  function waveList(n) {
+    const out = [], hpScale = 1 + 0.2 * (n - 1) + 0.014 * (n - 1) * (n - 1);
+    const add = (type, count, gap) => { for (let i = 0; i < count; i++) out.push({ type, gap, hpScale }); };
+    add("moth", 6 + n * 2, 0.75);
+    if (n >= 3) add("wasp", 2 + n, 0.45);
+    if (n >= 5) add("beetle", Math.floor(n / 2), 1.3);
+    if (n % 4 === 0) add("moth", 10 + n, 0.25); // a dense swarm
+    if (n === 10 || n === 15) add("queen", n === 15 ? 2 : 1, 3);
+    if (n >= 12) add("wasp", n, 0.3);
+    return out;
+  }
+  function startWave() {
+    if (spawning || bugs.length || wave >= WAVES || over) return;
+    wave++; queue = waveList(wave); spawning = true; spawnT = 0;
+    hud();
+  }
+  let spawnT = 0;
+
+  // ----- towers -----
+  const stats = tw => {
+    const b = TOWERS[tw.type], k = tw.lvl - 1;
+    return { range: b.range + k * 0.35, cd: b.cd * Math.pow(0.86, k), dmg: b.dmg * Math.pow(1.65, k), splash: b.splash, slow: b.slow, strongest: b.strongest };
+  };
+  const upCost = tw => tw.lvl >= 3 ? null : Math.round(TOWERS[tw.type].cost * (tw.lvl === 1 ? 0.8 : 1.3));
+  function place(cx, cy) {
+    if (!picked) return false;
+    const b = TOWERS[picked];
+    if (blocked[cy * COLS + cx] || towers.some(o => o.cx === cx && o.cy === cy)) return false;
+    if (nectar < b.cost) { info(`Not enough nectar for a ${b.name.toLowerCase()} yet.`); return true; }
+    nectar -= b.cost;
+    const tw = { type: picked, cx, cy, x: (cx + 0.5) * TS, y: (cy + 0.5) * TS, lvl: 1, cool: 0, spent: b.cost, aim: 0, fx: 0 };
+    towers.push(tw); puffs.push({ x: tw.x, y: tw.y, r: 4, life: 1, col: b.col });
+    hud(); toolbar();
+    return true;
+  }
+  function upgrade() {
+    if (!sel) return; const c = upCost(sel);
+    if (c == null || nectar < c) return;
+    nectar -= c; sel.spent += c; sel.lvl++; hud(); info(); toolbar();
+  }
+  function sell() {
+    if (!sel) return;
+    nectar += Math.round(sel.spent * 0.7); towers = towers.filter(o => o !== sel); sel = null; hud(); info(); toolbar();
+  }
+
+  // ----- simulation -----
+  function damage(b, amount) {
+    const d = Math.max(1, amount - b.armor);
+    b.hp -= d;
+    if (b.hp <= 0 && !b.dead) {
+      b.dead = true; nectar += b.bounty; kills++;
+      puffs.push({ x: b.x, y: b.y, r: b.size, life: 1, col: b.col });
+    }
+  }
+  function update(dt) {
+    t += dt;
+    if (spawning) {
+      spawnT -= dt;
+      while (spawnT <= 0 && queue.length) {
+        const s = queue.shift(), base = BUGS[s.type];
+        bugs.push({ ...base, type: s.type, max: Math.round(base.hp * s.hpScale), hp: Math.round(base.hp * s.hpScale), d: 0, slowT: 0, x: pts[0][0], y: pts[0][1], phase: Math.random() * 6 });
+        spawnT += s.gap;
+      }
+      if (!queue.length) spawning = false;
+    }
+    for (const b of bugs) {
+      if (b.slowT > 0) b.slowT -= dt;
+      b.d += b.speed * TS * dt * (b.slowT > 0 ? 0.5 : 1);
+      [b.x, b.y] = along(b.d);
+      if (b.d >= PATH_LEN && !b.dead) {
+        b.dead = true; b.escaped = true; lives -= b.lives;
+        puffs.push({ x: b.x, y: b.y, r: 30, life: 1, col: "#ff7b6b" });
+      }
+    }
+    bugs = bugs.filter(b => !b.dead);
+
+    for (const tw of towers) {
+      tw.cool -= dt; tw.fx = Math.max(0, tw.fx - dt * 4);
+      if (tw.cool > 0) continue;
+      const s = stats(tw), R = s.range * TS;
+      const inRange = bugs.filter(b => Math.hypot(b.x - tw.x, b.y - tw.y) <= R);
+      if (!inRange.length) continue;
+      const target = s.strongest ? inRange.reduce((a, b) => b.hp > a.hp ? b : a) : inRange.reduce((a, b) => b.d > a.d ? b : a);
+      tw.cool = s.cd; tw.aim = Math.atan2(target.y - tw.y, target.x - tw.x); tw.fx = 1;
+      if (tw.type === "frog") { damage(target, s.dmg); shots.push({ kind: "tongue", x: tw.x, y: tw.y, tx: target.x, ty: target.y, life: 0.12 }); }
+      else shots.push({ kind: tw.type, x: tw.x, y: tw.y, target, s, speed: tw.type === "owl" ? 900 : tw.type === "spider" ? 420 : 360, life: 2 });
+    }
+    for (const sh of shots) {
+      sh.life -= dt;
+      if (sh.kind === "tongue") continue;
+      const tx = sh.target.x, ty = sh.target.y, d = Math.hypot(tx - sh.x, ty - sh.y), step = sh.speed * dt;
+      if (d <= step) {
+        sh.life = 0;
+        if (sh.s.splash) {
+          for (const b of bugs) if (Math.hypot(b.x - tx, b.y - ty) <= sh.s.splash * TS) { damage(b, sh.s.dmg); if (sh.s.slow) b.slowT = 1.8; }
+          puffs.push({ x: tx, y: ty, r: sh.s.splash * TS, life: 1, col: sh.kind === "spider" ? "#d9d0ee" : "#ffe066", ring: true });
+        } else damage(sh.target, sh.s.dmg);
+      } else { sh.x += (tx - sh.x) / d * step; sh.y += (ty - sh.y) / d * step; }
+    }
+    shots = shots.filter(s => s.life > 0);
+    bugs = bugs.filter(b => !b.dead);
+    for (const p of puffs) p.life -= dt * 2;
+    puffs = puffs.filter(p => p.life > 0);
+
+    if (lives <= 0 && !over) end(false);
+    if (!spawning && !bugs.length && wave > 0 && !over) {
+      if (wave >= WAVES) end(true);
+      else if (!waveDone) { waveDone = true; nectar += 10 + wave * 2; info(`Wave ${wave} cleared. +${10 + wave * 2} nectar.`); }
+    }
+    if (spawning || bugs.length) waveDone = false;
+    hud();
+  }
+  let waveDone = true;
+
+  function end(won) {
+    over = true;
+    let best = 0; try { best = +localStorage.getItem("lantern-best") || 0; } catch {}
+    const reached = won ? WAVES + 1 : wave;
+    if (reached > best) try { localStorage.setItem("lantern-best", reached); } catch {}
+    $("ov-t").textContent = won ? "Dawn breaks" : "The lantern went out";
+    $("ov-p").textContent = won
+      ? `All ${WAVES} waves held with ${lives} lantern ${lives === 1 ? "life" : "lives"} to spare and ${kills} bugs turned back. The garden sleeps.`
+      : `The moths reached the light on wave ${wave}. ${kills} bugs turned back. ${reached > best ? "Your best night so far." : `Your best is wave ${Math.min(best, WAVES)}${best > WAVES ? " (cleared)" : ""}.`}`;
+    $("over").hidden = false; $("again").focus();
+  }
+
+  // ----- drawing -----
+  const canvas = $("c"), ctx = canvas.getContext("2d"), dpr = Math.min(2, devicePixelRatio || 1);
+  let scale = 1, ground = null;
+  function layout() {
+    const r = $("stage").getBoundingClientRect();
+    scale = Math.min((r.width - 32) / W, (r.height - 8) / H);
+    canvas.style.width = W * scale + "px"; canvas.style.height = H * scale + "px";
+    canvas.width = W * scale * dpr; canvas.height = H * scale * dpr;
+    paintGround();
+  }
+  function paintGround() {
+    ground = document.createElement("canvas"); ground.width = W; ground.height = H;
+    const g = ground.getContext("2d");
+    g.fillStyle = "#12261b"; g.fillRect(0, 0, W, H);
+    for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+      if ((x + y) % 2) { g.fillStyle = "#15291e"; g.fillRect(x * TS, y * TS, TS, TS); }
+    }
+    // grass tufts
+    for (let i = 0; i < 520; i++) {
+      const x = Math.random() * W, y = Math.random() * H;
+      g.strokeStyle = `hsla(${120 + Math.random() * 30}, 35%, ${22 + Math.random() * 14}%, 0.9)`; g.lineWidth = 1.2;
+      g.beginPath(); g.moveTo(x, y); g.lineTo(x + (Math.random() - 0.5) * 4, y - 4 - Math.random() * 5); g.stroke();
+    }
+    // the trail
+    g.lineCap = "round"; g.lineJoin = "round";
+    g.strokeStyle = "#3b2f22"; g.lineWidth = TS * 0.86; g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(...p) : g.moveTo(...p)); g.stroke();
+    g.strokeStyle = "#4a3b2a"; g.lineWidth = TS * 0.66; g.stroke();
+    for (let i = 0; i < 260; i++) {
+      const [x, y] = along(Math.random() * PATH_LEN);
+      g.fillStyle = `rgba(${150 + Math.random() * 40}, ${120 + Math.random() * 30}, 90, 0.35)`;
+      g.beginPath(); g.arc(x + (Math.random() - 0.5) * TS * 0.6, y + (Math.random() - 0.5) * TS * 0.6, 1 + Math.random() * 2, 0, 7); g.fill();
+    }
+    // a few flowers off the path
+    for (let i = 0; i < 40; i++) {
+      const cx = Math.random() * COLS | 0, cy = Math.random() * ROWS | 0; if (blocked[cy * COLS + cx]) continue;
+      const x = (cx + Math.random()) * TS, y = (cy + Math.random()) * TS;
+      g.fillStyle = ["#e8a0c8", "#f2e6a0", "#a8c8f0"][i % 3];
+      for (let k = 0; k < 5; k++) { const a = k / 5 * 6.28; g.beginPath(); g.arc(x + Math.cos(a) * 2.5, y + Math.sin(a) * 2.5, 2, 0, 7); g.fill(); }
+      g.fillStyle = "#ffd27a"; g.beginPath(); g.arc(x, y, 1.6, 0, 7); g.fill();
+    }
+  }
+
+  function drawTower(c, type, x, y, s, lvl = 1, aim = 0, fx = 0) {
+    c.save(); c.translate(x, y);
+    const r = s * 0.36;
+    if (type === "frog") {
+      c.fillStyle = "#2f6a3a"; c.beginPath(); c.ellipse(0, 3 * s / 48, r * 1.15, r * 0.8, 0, 0, 7); c.fill(); // lily pad
+      c.fillStyle = "#6fcf6a"; c.beginPath(); c.arc(0, 0, r * 0.75, 0, 7); c.fill();
+      c.rotate(aim);
+      for (const sd of [-1, 1]) { c.fillStyle = "#fff"; c.beginPath(); c.arc(r * 0.35, sd * r * 0.42, r * 0.28, 0, 7); c.fill(); c.fillStyle = "#111"; c.beginPath(); c.arc(r * 0.42, sd * r * 0.42, r * 0.13, 0, 7); c.fill(); }
+    } else if (type === "spider") {
+      c.strokeStyle = "#cfc6e0aa"; c.lineWidth = 1;
+      for (let k = 0; k < 6; k++) { const a = k / 6 * 6.28; c.beginPath(); c.moveTo(0, 0); c.lineTo(Math.cos(a) * r * 1.3, Math.sin(a) * r * 1.3); c.stroke(); }
+      c.beginPath(); c.arc(0, 0, r * 0.8, 0, 7); c.stroke(); c.beginPath(); c.arc(0, 0, r * 1.15, 0, 7); c.stroke();
+      c.strokeStyle = "#1a1420"; c.lineWidth = 2;
+      for (let k = 0; k < 8; k++) { const a = (k / 8) * 6.28 + 0.2; c.beginPath(); c.moveTo(0, 0); c.lineTo(Math.cos(a) * r * 0.85, Math.sin(a) * r * 0.85); c.stroke(); }
+      c.fillStyle = "#2a2030"; c.beginPath(); c.arc(0, 0, r * 0.45, 0, 7); c.fill();
+      c.fillStyle = "#b9a7d8"; c.beginPath(); c.arc(0, -r * 0.1, r * 0.15, 0, 7); c.fill();
+    } else if (type === "firefly") {
+      const gl = c.createRadialGradient(0, 0, 0, 0, 0, r * 1.4);
+      gl.addColorStop(0, `rgba(255,224,102,${0.5 + fx * 0.4})`); gl.addColorStop(1, "rgba(255,224,102,0)");
+      c.fillStyle = gl; c.beginPath(); c.arc(0, 0, r * 1.4, 0, 7); c.fill();
+      for (let k = 0; k < 3; k++) {
+        const a = t * 2.2 + k * 2.09, px = Math.cos(a) * r * 0.55, py = Math.sin(a * 1.3) * r * 0.45;
+        c.fillStyle = "#fff6c0"; c.beginPath(); c.arc(px, py, r * 0.16, 0, 7); c.fill();
+      }
+    } else if (type === "owl") {
+      c.fillStyle = "#5a3d28"; c.beginPath(); c.ellipse(0, 0, r * 0.8, r, 0, 0, 7); c.fill();
+      c.fillStyle = "#c99a6b"; c.beginPath(); c.ellipse(0, r * 0.25, r * 0.5, r * 0.55, 0, 0, 7); c.fill();
+      for (const sd of [-1, 1]) {
+        c.fillStyle = "#f6e7b0"; c.beginPath(); c.arc(sd * r * 0.33, -r * 0.3, r * 0.27, 0, 7); c.fill();
+        c.fillStyle = "#111"; c.beginPath(); c.arc(sd * r * 0.33 + Math.cos(aim) * r * 0.08, -r * 0.3 + Math.sin(aim) * r * 0.08, r * 0.12, 0, 7); c.fill();
+      }
+      c.fillStyle = "#e0a040"; c.beginPath(); c.moveTo(-r * 0.08, -r * 0.1); c.lineTo(r * 0.08, -r * 0.1); c.lineTo(0, r * 0.08); c.fill();
+    }
+    for (let k = 1; k < lvl; k++) { c.fillStyle = "#ffd27a"; c.beginPath(); c.arc(-r + k * 7 * s / 48, r * 1.15, 2.4 * s / 48, 0, 7); c.fill(); }
+    c.restore();
+  }
+
+  function drawBug(b) {
+    ctx.save(); ctx.translate(b.x, b.y);
+    const flap = Math.sin(t * (b.type === "wasp" ? 40 : 18) + b.phase);
+    const s = b.size;
+    if (b.slowT > 0) { ctx.strokeStyle = "#d9d0ee88"; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(0, 0, s * 1.4, 0, 7); ctx.stroke(); }
+    if (b.type === "beetle") {
+      ctx.fillStyle = b.col; ctx.beginPath(); ctx.ellipse(0, 0, s, s * 0.8, 0, 0, 7); ctx.fill();
+      ctx.strokeStyle = "#1b2a3a"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(-s, 0); ctx.lineTo(s, 0); ctx.stroke();
+      ctx.fillStyle = "#9fc0e0"; ctx.beginPath(); ctx.arc(-s * 0.3, -s * 0.3, s * 0.2, 0, 7); ctx.fill();
+    } else {
+      ctx.fillStyle = b.col; ctx.globalAlpha = 0.85;
+      for (const sd of [-1, 1]) { ctx.beginPath(); ctx.ellipse(0, sd * s * 0.55 * (0.6 + flap * 0.4), s * 0.8, s * 0.5 * (0.5 + Math.abs(flap) * 0.5), 0, 0, 7); ctx.fill(); }
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = b.type === "wasp" ? "#2a2010" : "#6e6250";
+      ctx.beginPath(); ctx.ellipse(0, 0, s * 0.7, s * 0.28, 0, 0, 7); ctx.fill();
+      if (b.type === "wasp") { ctx.fillStyle = b.col; ctx.fillRect(-s * 0.3, -s * 0.28, s * 0.15, s * 0.56); ctx.fillRect(s * 0.05, -s * 0.28, s * 0.15, s * 0.56); }
+      if (b.type === "queen") { ctx.fillStyle = "#ffd27a"; ctx.beginPath(); ctx.arc(s * 0.6, 0, 3, 0, 7); ctx.fill(); }
+    }
+    ctx.restore();
+    if (b.hp < b.max) {
+      ctx.fillStyle = "#00000088"; ctx.fillRect(b.x - 12, b.y - b.size - 9, 24, 4);
+      ctx.fillStyle = b.hp / b.max > 0.4 ? "#7fcf8a" : "#ff7b6b"; ctx.fillRect(b.x - 12, b.y - b.size - 9, 24 * b.hp / b.max, 4);
+    }
+  }
+
+  function draw() {
+    ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
+    ctx.drawImage(ground, 0, 0);
+    // the lantern
+    const [lx, ly] = [(LANTERN[0] + 0.5) * TS, (LANTERN[1] + 0.5) * TS];
+    const flick = 1 + Math.sin(t * 9) * 0.04 + Math.sin(t * 23) * 0.02, bright = Math.max(0.25, lives / 20);
+    const lg = ctx.createRadialGradient(lx, ly, 0, lx, ly, TS * 3 * flick);
+    lg.addColorStop(0, `rgba(255,210,122,${0.55 * bright})`); lg.addColorStop(1, "rgba(255,210,122,0)");
+    ctx.fillStyle = lg; ctx.beginPath(); ctx.arc(lx, ly, TS * 3, 0, 7); ctx.fill();
+    ctx.fillStyle = "#2b2418"; ctx.fillRect(lx - 11, ly - 16, 22, 30);
+    ctx.fillStyle = `rgba(255,${200 + 30 * bright},${110 + 40 * bright},1)`; ctx.fillRect(lx - 8, ly - 12, 16, 22);
+    ctx.fillStyle = "#2b2418"; ctx.fillRect(lx - 13, ly - 19, 26, 4); ctx.fillRect(lx - 3, ly - 24, 6, 6);
+
+    // placement ghost
+    if (hover && picked && !over) {
+      const [cx, cy] = hover, ok = !blocked[cy * COLS + cx] && !towers.some(o => o.cx === cx && o.cy === cy);
+      const x = (cx + 0.5) * TS, y = (cy + 0.5) * TS;
+      ctx.fillStyle = ok ? "#7fcf8a22" : "#ff7b6b33"; ctx.fillRect(cx * TS, cy * TS, TS, TS);
+      ctx.strokeStyle = ok ? "#7fcf8a88" : "#ff7b6b88"; ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.arc(x, y, TOWERS[picked].range * TS, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+      if (ok) { ctx.globalAlpha = 0.6; drawTower(ctx, picked, x, y, TS); ctx.globalAlpha = 1; }
+    }
+    if (sel) {
+      ctx.strokeStyle = "#ffd27aaa"; ctx.fillStyle = "#ffd27a14"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(sel.x, sel.y, stats(sel).range * TS, 0, 7); ctx.fill(); ctx.stroke();
+    }
+    for (const tw of towers) drawTower(ctx, tw.type, tw.x, tw.y, TS, tw.lvl, tw.aim, tw.fx);
+    for (const b of bugs) drawBug(b);
+    for (const sh of shots) {
+      if (sh.kind === "tongue") { ctx.strokeStyle = "#ff8fa8"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(sh.x, sh.y); ctx.lineTo(sh.tx, sh.ty); ctx.stroke(); }
+      else if (sh.kind === "owl") { ctx.fillStyle = "#f6e7b0"; ctx.beginPath(); ctx.arc(sh.x, sh.y, 4, 0, 7); ctx.fill(); }
+      else if (sh.kind === "spider") { ctx.strokeStyle = "#e6e0f5"; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(sh.x, sh.y, 5, 0, 7); ctx.stroke(); }
+      else { ctx.fillStyle = "#fff6c0"; ctx.shadowColor = "#ffe066"; ctx.shadowBlur = 10; ctx.beginPath(); ctx.arc(sh.x, sh.y, 4, 0, 7); ctx.fill(); ctx.shadowBlur = 0; }
+    }
+    for (const p of puffs) {
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.strokeStyle = p.col; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.ring ? p.r * (1.1 - p.life * 0.3) : p.r * (2 - p.life), 0, 7); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    // night vignette
+    const v = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, W * 0.7);
+    v.addColorStop(0, "rgba(0,0,0,0)"); v.addColorStop(1, "rgba(0,8,4,0.45)");
+    ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+  }
+
+  // ----- UI -----
+  function hud() {
+    $("wave").textContent = wave; $("nectar").textContent = nectar; $("lives").textContent = Math.max(0, lives);
+    const busy = spawning || bugs.length > 0;
+    $("next").disabled = busy || over || wave >= WAVES;
+    $("next").textContent = busy ? `Wave ${wave} in progress` : wave >= WAVES ? "Last wave" : `Start wave ${wave + 1}`;
+    for (const b of $("towers").children) b.disabled = nectar < TOWERS[b.dataset.t].cost && picked !== b.dataset.t;
+    if (sel) { const up = $("up"); if (up) up.disabled = upCost(sel) == null || nectar < upCost(sel); }
+  }
+  function toolbar() {
+    for (const b of $("towers").children) b.setAttribute("aria-pressed", String(picked === b.dataset.t));
+  }
+  function info(msg) {
+    const el = $("info");
+    if (sel) {
+      const s = stats(sel), c = upCost(sel), b = TOWERS[sel.type];
+      el.innerHTML = `<span><b>${b.name}</b> level ${sel.lvl} · ${Math.round(s.dmg)} dmg · range ${s.range.toFixed(1)}</span>` +
+        `<button class="btn" id="up" type="button">${c == null ? "max level" : `upgrade · ${c}`}</button>` +
+        `<button class="btn" id="sellb" type="button">sell · ${Math.round(sel.spent * 0.7)}</button>`;
+      $("up").addEventListener("click", upgrade); $("sellb").addEventListener("click", sell);
+      hud(); return;
+    }
+    if (msg) { el.textContent = msg; return; }
+    if (picked) { const b = TOWERS[picked]; el.innerHTML = `<span><b>${b.name}</b>: ${b.desc}. Tap the grass to place one.</span>`; }
+  }
+  Object.entries(TOWERS).forEach(([k, b], i) => {
+    const btn = document.createElement("button");
+    btn.type = "button"; btn.className = "tw"; btn.dataset.t = k;
+    const ic = document.createElement("canvas"); ic.width = 68; ic.height = 68;
+    const ictx = ic.getContext("2d"); ictx.scale(2, 2); drawTower(ictx, k, 17, 17, 40);
+    btn.append(ic);
+    btn.insertAdjacentHTML("beforeend", `<b>${b.name}</b><small>${b.cost} nectar · ${i + 1}</small>`);
+    btn.addEventListener("click", () => choose(k));
+    $("towers").appendChild(btn);
+  });
+  function choose(k) { picked = picked === k ? null : k; sel = null; toolbar(); info(picked ? null : "Pick a creature, or tap one you've placed to upgrade it."); }
+
+  function tileAt(e) {
+    const r = canvas.getBoundingClientRect();
+    const x = (e.clientX - r.left) / scale, y = (e.clientY - r.top) / scale;
+    const cx = Math.floor(x / TS), cy = Math.floor(y / TS);
+    return cx >= 0 && cy >= 0 && cx < COLS && cy < ROWS ? [cx, cy] : null;
+  }
+  canvas.addEventListener("pointermove", e => { hover = tileAt(e); });
+  canvas.addEventListener("pointerleave", () => { hover = null; });
+  canvas.addEventListener("pointerdown", e => {
+    if (over) return;
+    const tile = tileAt(e); if (!tile) return;
+    hover = tile;
+    const existing = towers.find(o => o.cx === tile[0] && o.cy === tile[1]);
+    if (existing) { sel = existing === sel ? null : existing; picked = null; toolbar(); info(sel ? null : "Pick a creature, or tap one you've placed to upgrade it."); return; }
+    if (picked) { place(...tile); return; }
+    sel = null; info("Pick a creature first, then tap the grass.");
+  });
+  addEventListener("keydown", e => {
+    const keys = Object.keys(TOWERS), n = parseInt(e.key, 10);
+    if (n >= 1 && n <= keys.length) choose(keys[n - 1]);
+    else if (e.key === "Escape") { picked = null; sel = null; toolbar(); info("Pick a creature, or tap one you've placed to upgrade it."); }
+    else if (e.key === "u" || e.key === "U") upgrade();
+    else if (e.key === "Enter" || e.key === "n" || e.key === "N") startWave();
+    else if (e.key === "f" || e.key === "F") $("speed").click();
+  });
+  $("next").addEventListener("click", startWave);
+  $("speed").addEventListener("click", () => { speed = speed === 1 ? 2 : speed === 2 ? 3 : 1; $("speed").textContent = speed + "×"; });
+  $("again").addEventListener("click", reset);
+  addEventListener("resize", layout);
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (!over) for (let k = 0; k < speed; k++) update(dt);
+    else t += dt;
+    draw();
+    requestAnimationFrame(frame);
+  }
+  reset(); layout(); requestAnimationFrame(frame);
+  window.__lantern = { TOWERS, get state() { return { nectar, lives, wave, towers: towers.length, bugs: bugs.length, spawning, over }; }, place: (k, cx, cy) => { picked = k; const r = place(cx, cy); picked = null; return r; }, startWave, update, blocked, COLS, ROWS, upgrade: tw => { sel = tw; upgrade(); sel = null; }, get towers() { return towers; } };
+})();
+</script>
+</body>
+</html>

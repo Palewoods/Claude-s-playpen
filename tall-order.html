@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tall Order</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=DM+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: one tall sky; the running height in huge type at the top, the tower rising through the middle. */
+  :root {
+    --ink: #ffffff;
+    --soft: #ffffffb3;
+    --display: "Dela Gothic One", "Arial Black", system-ui, sans-serif;
+    --mono: "DM Mono", ui-monospace, Menlo, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; }
+  body { background: #6fa8dc; color: var(--ink); font: 14px/1.4 var(--mono); overflow: hidden; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: pointer; }
+  .top { position: fixed; left: 0; right: 0; top: 0; padding: calc(14px + env(safe-area-inset-top, 0px)) 16px 0; display: grid; justify-items: center; gap: 4px; pointer-events: none; text-shadow: 0 2px 12px #00000033; }
+  #score { font: 400 clamp(56px, 14vw, 110px)/1 var(--display); }
+  #combo { min-height: 1.4em; color: var(--soft); letter-spacing: 0.1em; text-transform: uppercase; }
+  .corner { position: fixed; top: calc(14px + env(safe-area-inset-top, 0px)); right: 16px; display: flex; gap: 14px; align-items: baseline; }
+  .corner a, .corner span { color: var(--soft); text-decoration: none; }
+  .corner a:hover { color: var(--ink); }
+  .msg { position: fixed; left: 0; right: 0; bottom: calc(14% + env(safe-area-inset-bottom, 0px)); text-align: center; padding: 0 16px; pointer-events: none; display: grid; gap: 6px; text-shadow: 0 2px 10px #00000040; }
+  .msg h1 { margin: 0; font: 400 clamp(34px, 8vw, 60px)/1 var(--display); }
+  .msg p { margin: 0; color: var(--soft); }
+  :focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+</style>
+</head>
+<body>
+<canvas id="c" aria-label="Stacking game. Tap, click or press space to drop the moving block."></canvas>
+<div class="top"><span id="score">0</span><span id="combo"></span></div>
+<div class="corner"><span id="best">best 0</span><a href="index.html">&larr; playpen</a></div>
+<div class="msg" id="msg"><h1 id="m-t">Tall Order</h1><p id="m-p">Tap to drop each block on the one below. Whatever hangs over the edge gets cut off. Land it dead centre to keep it whole.</p></div>
+<script>
+(() => {
+  const canvas = document.getElementById("c"), ctx = canvas.getContext("2d");
+  const dpr = Math.min(2, devicePixelRatio || 1);
+  const $ = id => document.getElementById(id);
+  let W, H, U;
+  function resize() { W = innerWidth; H = innerHeight; canvas.width = W * dpr; canvas.height = H * dpr; U = Math.min(W, H * 0.8) / 34; }
+  addEventListener("resize", resize); resize();
+
+  const SIZE = 10, BH = 2, RANGE = 14, TOL = 0.35;
+  let stack, cur, debris, rings, mode = "title", combo = 0, camY = 0, t = 0, best = 0, hueBase = Math.random() * 360;
+  try { best = +localStorage.getItem("tall-best") || 0; } catch {}
+  $("best").textContent = "best " + best;
+
+  // ----- sound -----
+  let ac = null;
+  function audio() { if (!ac) try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch {} if (ac?.state === "suspended") ac.resume(); }
+  function tone(n, perfect) {
+    if (!ac) return;
+    const scale = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];
+    const f = 220 * Math.pow(2, scale[Math.min(n, scale.length - 1)] / 12) * (perfect ? 2 : 1);
+    const o = ac.createOscillator(), g = ac.createGain(), tt = ac.currentTime;
+    o.type = perfect ? "sine" : "triangle"; o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, tt); g.gain.exponentialRampToValueAtTime(0.16, tt + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, tt + (perfect ? 0.6 : 0.25));
+    o.connect(g); g.connect(ac.destination); o.start(tt); o.stop(tt + 0.7);
+  }
+
+  const hueAt = i => (hueBase + i * 7) % 360;
+  function reset() {
+    stack = [{ x: 0, z: 0, w: SIZE, d: SIZE, hue: hueAt(0) }];
+    for (let i = 1; i < 4; i++) stack.push({ x: 0, z: 0, w: SIZE, d: SIZE, hue: hueAt(i) });
+    debris = []; rings = []; combo = 0; cur = null;
+  }
+  function spawn() {
+    const top = stack[stack.length - 1], axis = stack.length % 2 ? "x" : "z";
+    const level = stack.length - 4;
+    cur = { x: top.x, z: top.z, w: top.w, d: top.d, axis, off: -RANGE, dir: 1, speed: 13 + Math.min(level, 40) * 0.42, hue: hueAt(stack.length) };
+    if (axis === "x") cur.x = top.x - RANGE; else cur.z = top.z - RANGE;
+  }
+  function start() { audio(); reset(); mode = "play"; spawn(); $("msg").hidden = true; $("score").textContent = "0"; $("combo").textContent = ""; }
+
+  function drop() {
+    if (mode !== "play") { if (mode !== "falling") start(); return; }
+    const top = stack[stack.length - 1], ax = cur.axis;
+    const c = ax === "x" ? cur.x : cur.z, pc = ax === "x" ? top.x : top.z, s = ax === "x" ? cur.w : cur.d;
+    const delta = c - pc, y = stack.length;
+    if (Math.abs(delta) <= TOL) {
+      combo++;
+      if (ax === "x") cur.x = pc; else cur.z = pc;
+      // a run of perfect drops slowly grows the block back
+      if (combo >= 3) { if (ax === "x") cur.w = Math.min(SIZE, cur.w + 0.6); else cur.d = Math.min(SIZE, cur.d + 0.6); }
+      rings.push({ x: cur.x, z: cur.z, w: cur.w, d: cur.d, y, life: 1 });
+      tone(Math.min(combo, 10), true);
+    } else {
+      combo = 0;
+      const overlap = s - Math.abs(delta);
+      if (overlap <= 0) { // missed completely
+        debris.push({ ...cur, y, vy: 0, life: 1.6 }); cur = null; return gameOver();
+      }
+      const keptC = pc + delta / 2, cutC = keptC + Math.sign(delta) * (overlap / 2 + Math.abs(delta) / 2);
+      const piece = { ...cur, y, vy: 0, life: 1.4 };
+      if (ax === "x") { cur.w = overlap; cur.x = keptC; piece.w = Math.abs(delta); piece.x = cutC; }
+      else { cur.d = overlap; cur.z = keptC; piece.d = Math.abs(delta); piece.z = cutC; }
+      debris.push(piece);
+      tone(0, false);
+    }
+    stack.push({ x: cur.x, z: cur.z, w: cur.w, d: cur.d, hue: cur.hue });
+    const score = stack.length - 4;
+    $("score").textContent = score;
+    $("combo").textContent = combo >= 2 ? `perfect ×${combo}` : combo === 1 ? "perfect" : "";
+    spawn();
+  }
+  function gameOver() {
+    mode = "falling";
+    const score = stack.length - 4, isBest = score > best;
+    if (isBest) { best = score; try { localStorage.setItem("tall-best", best); } catch {} $("best").textContent = "best " + best; }
+    setTimeout(() => {
+      mode = "over";
+      $("m-t").textContent = isBest && score > 0 ? "New best" : score >= 50 ? "Sky high" : score >= 20 ? "Nice tower" : "Timber";
+      $("m-p").textContent = `${score} ${score === 1 ? "block" : "blocks"} tall. Tap to build again.`;
+      $("msg").hidden = false;
+    }, 900);
+  }
+
+  // ----- isometric projection -----
+  const C30 = Math.cos(Math.PI / 6), S30 = 0.5;
+  const proj = (x, y, z) => [W / 2 + (x - z) * C30 * U, H * 0.62 + ((x + z) * S30 - (y - camY) ) * U];
+  function box(x, y, z, w, d, h, hue, alpha = 1) {
+    const x0 = x - w / 2, x1 = x + w / 2, z0 = z - d / 2, z1 = z + d / 2, y0 = y, y1 = y + h;
+    const P = (a, b, c) => proj(a, b, c);
+    ctx.globalAlpha = alpha;
+    // top
+    ctx.fillStyle = `hsl(${hue}, 62%, 66%)`;
+    ctx.beginPath(); [[x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1]].forEach((p, i) => { const [X, Y] = P(...p); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); }); ctx.fill();
+    // left face (facing +z)
+    ctx.fillStyle = `hsl(${hue}, 55%, 52%)`;
+    ctx.beginPath(); [[x0, y1, z1], [x1, y1, z1], [x1, y0, z1], [x0, y0, z1]].forEach((p, i) => { const [X, Y] = P(...p); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); }); ctx.fill();
+    // right face (facing +x)
+    ctx.fillStyle = `hsl(${hue}, 50%, 40%)`;
+    ctx.beginPath(); [[x1, y1, z0], [x1, y1, z1], [x1, y0, z1], [x1, y0, z0]].forEach((p, i) => { const [X, Y] = P(...p); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); }); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // sky: blue by day, sunset in the middle, space up high
+  const stars = Array.from({ length: 140 }, () => [Math.random(), Math.random(), Math.random()]);
+  function sky() {
+    const h = Math.max(0, stack.length - 4), k = Math.min(1, h / 70);
+    const mix = (a, b, f) => a.map((v, i) => Math.round(v + (b[i] - v) * f));
+    const stops = [[[111, 168, 220], [188, 220, 240]], [[90, 70, 150], [245, 160, 120]], [[8, 10, 30], [40, 30, 80]]];
+    const seg = k < 0.5 ? 0 : 1, f = k < 0.5 ? k * 2 : (k - 0.5) * 2;
+    const top = mix(stops[seg][0], stops[seg + 1][0], f), bot = mix(stops[seg][1], stops[seg + 1][1], f);
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, `rgb(${top})`); g.addColorStop(1, `rgb(${bot})`);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    document.body.style.background = `rgb(${top})`;
+    if (k > 0.45) {
+      ctx.fillStyle = "#fff";
+      for (const [x, y, a] of stars) { ctx.globalAlpha = (k - 0.45) * 1.8 * a; ctx.fillRect(x * W, ((y * H + camY * U * 0.2) % H + H) % H, 1.5, 1.5); }
+      ctx.globalAlpha = 1;
+    }
+    // drifting clouds at low altitude
+    if (k < 0.6) {
+      ctx.fillStyle = `rgba(255,255,255,${0.35 * (1 - k / 0.6)})`;
+      for (let i = 0; i < 5; i++) {
+        const cx = ((i * 0.27 + t * 0.006 * (1 + i * 0.3)) % 1.3 - 0.15) * W, cy = (((i * 0.21 + 0.1) * H + camY * U * 0.5) % (H * 1.2));
+        for (let j = 0; j < 4; j++) { ctx.beginPath(); ctx.ellipse(cx + j * 26, cy + (j % 2) * 6, 34, 14, 0, 0, Math.PI * 2); ctx.fill(); }
+      }
+    }
+  }
+
+  function frame(now) {
+    const dt = Math.min(0.033, (now - (frame.last || now)) / 1000); frame.last = now; t += dt * 60;
+    if (mode === "play" && cur) {
+      cur.off += cur.dir * cur.speed * dt;
+      if (cur.off > RANGE) { cur.off = RANGE; cur.dir = -1; } else if (cur.off < -RANGE) { cur.off = -RANGE; cur.dir = 1; }
+      const top = stack[stack.length - 1];
+      if (cur.axis === "x") cur.x = top.x + cur.off; else cur.z = top.z + cur.off;
+    }
+    if (mode === "title" || mode === "over") { // idle: slowly orbit hue so the tower glows
+      hueBase = (hueBase + dt * 4) % 360;
+    }
+    const target = Math.max(0, stack.length * BH - 8);
+    camY += (target - camY) * Math.min(1, dt * 4);
+    for (const p of debris) { p.vy -= 60 * dt; p.y += p.vy * dt / BH; p.life -= dt; }
+    debris = debris.filter(p => p.life > 0);
+    for (const r of rings) r.life -= dt * 1.6;
+    rings = rings.filter(r => r.life > 0);
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    sky();
+    const from = Math.max(0, stack.length - 30);
+    for (let i = from; i < stack.length; i++) { const s = stack[i]; box(s.x, i * BH, s.z, s.w, s.d, BH, s.hue); }
+    for (const r of rings) {
+      const grow = (1 - r.life) * 3;
+      ctx.strokeStyle = `rgba(255,255,255,${r.life})`; ctx.lineWidth = 2;
+      const x0 = r.x - r.w / 2 - grow, x1 = r.x + r.w / 2 + grow, z0 = r.z - r.d / 2 - grow, z1 = r.z + r.d / 2 + grow, y = r.y * BH;
+      ctx.beginPath(); [[x0, z0], [x1, z0], [x1, z1], [x0, z1]].forEach(([a, b], i) => { const [X, Y] = proj(a, y, b); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); }); ctx.closePath(); ctx.stroke();
+    }
+    if (cur && mode === "play") box(cur.x, stack.length * BH, cur.z, cur.w, cur.d, BH, cur.hue);
+    for (const p of debris) box(p.x, p.y * BH, p.z, p.w, p.d, BH, p.hue, Math.max(0, Math.min(1, p.life)));
+    requestAnimationFrame(frame);
+  }
+
+  addEventListener("pointerdown", e => { if (e.target.closest("a")) return; drop(); });
+  addEventListener("keydown", e => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); if (!e.repeat) drop(); } });
+  reset();
+  requestAnimationFrame(frame);
+  window.__tall = { get state() { return { mode, height: stack.length - 4, combo }; }, drop, get cur() { return cur; }, get top() { return stack[stack.length - 1]; } };
+})();
+</script>
+</body>
+</html>

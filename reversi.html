@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Reversi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gloock&family=Work+Sans:wght@400;600;700&display=swap">
+<style>
+  /* Layout: a wooden board as the centrepiece, a scoreboard bar above and settings beneath. */
+  :root {
+    --bg: #e6e8ec;
+    --ink: #1b1d22;
+    --muted: #626876;
+    --wood: #c89b5e;
+    --wood-dk: #a87a40;
+    --grain: #b4874c;
+    --line: #2b1f12;
+    --accent: #b5462e;
+    --chip: #ffffff;
+    --display: "Gloock", Georgia, serif;
+    --body: "Work Sans", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #15171b; --ink: #ecedf0; --muted: #959baa; --chip: #22252b; --accent: #ff8a6b; color-scheme: dark; }
+  }
+  :root[data-theme="dark"] { --bg: #15171b; --ink: #ecedf0; --muted: #959baa; --chip: #22252b; --accent: #ff8a6b; color-scheme: dark; }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 400 15px/1.5 var(--body); padding-inline: 16px; padding-block: 20px 32px; }
+  .wrap { max-width: 560px; margin: 0 auto; display: grid; gap: 14px; }
+  header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  h1 { margin: 0; font: 400 clamp(32px, 7vw, 44px)/1 var(--display); letter-spacing: -0.01em; }
+  header a { color: var(--muted); text-decoration: none; }
+  header a:hover { color: var(--ink); }
+  .scores { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; }
+  .side { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 10px; background: var(--chip); border: 2px solid transparent; transition: border-color 0.2s; min-width: 0; }
+  .side.turn { border-color: var(--accent); }
+  .side:last-child { flex-direction: row-reverse; text-align: right; }
+  .stone { width: 22px; height: 22px; border-radius: 50%; flex: none; }
+  .stone.b { background: radial-gradient(circle at 35% 30%, #5a5d66, #0d0e10 70%); }
+  .stone.w { background: radial-gradient(circle at 35% 30%, #ffffff, #d7d4cc 75%); box-shadow: 0 0 0 1px #00000022; }
+  .side .who { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .side .n { font: 400 26px/1 var(--display); font-variant-numeric: tabular-nums; margin-left: auto; }
+  .side:last-child .n { margin-left: 0; margin-right: auto; }
+  .vs { color: var(--muted); font-size: 13px; }
+  #status { margin: 0; min-height: 1.5em; color: var(--muted); text-align: center; }
+  #status b { color: var(--ink); }
+  .board {
+    position: relative; aspect-ratio: 1; max-width: 100%; padding: 3.2%; border-radius: 14px;
+    background: repeating-linear-gradient(83deg, var(--wood) 0 9px, var(--grain) 9px 11px, var(--wood) 11px 23px, var(--wood-dk) 23px 24px), var(--wood);
+    box-shadow: 0 1px 0 #ffffff55 inset, 0 12px 30px -12px #00000066;
+  }
+  #grid { display: grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(8, 1fr); width: 100%; height: 100%; border: 2px solid var(--line); }
+  .sq { position: relative; border: 1px solid #2b1f1288; background: transparent; padding: 0; cursor: default; display: grid; place-items: center; }
+  .sq.legal { cursor: pointer; }
+  .sq.legal::after { content: ""; width: 22%; height: 22%; border-radius: 50%; background: #2b1f1255; transition: transform 0.15s; }
+  .sq.legal:hover::after { transform: scale(1.6); background: #2b1f1288; }
+  .hidehints .sq.legal::after { display: none; }
+  .sq:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; z-index: 1; }
+  .disc { width: 82%; height: 82%; border-radius: 50%; position: relative; transform-style: preserve-3d; transition: transform 0.45s cubic-bezier(.3,.7,.3,1.2); }
+  .disc::before, .disc::after { content: ""; position: absolute; inset: 0; border-radius: 50%; backface-visibility: hidden; }
+  .disc::before { background: radial-gradient(circle at 35% 30%, #5a5d66, #0d0e10 70%); box-shadow: 0 2px 3px #00000066; }
+  .disc::after { background: radial-gradient(circle at 35% 30%, #ffffff, #d7d4cc 75%); transform: rotateY(180deg); box-shadow: 0 2px 3px #00000044; }
+  .disc.white { transform: rotateY(180deg); }
+  .sq.last .disc { box-shadow: 0 0 0 3px var(--accent); border-radius: 50%; }
+  .star { position: absolute; width: 7px; height: 7px; border-radius: 50%; background: var(--line); transform: translate(-50%, -50%); pointer-events: none; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; justify-content: center; }
+  .seg { display: inline-flex; border: 1px solid #8b90a066; border-radius: 999px; padding: 3px; gap: 2px; }
+  .seg button, .btn { font: 600 13px var(--body); color: var(--muted); background: transparent; border: 0; border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+  .btn { border: 1px solid #8b90a066; color: var(--ink); }
+  .btn:disabled { opacity: 0.4; cursor: default; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  label.chk { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 13px; cursor: pointer; }
+  label.chk input { accent-color: var(--accent); }
+  @media (prefers-reduced-motion: reduce) { .disc { transition: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>Reversi</h1><a href="index.html">&larr; playpen</a></header>
+  <div class="scores">
+    <div class="side" id="sb"><span class="stone b"></span><span class="who" id="nb">You</span><span class="n" id="cb">2</span></div>
+    <span class="vs">vs</span>
+    <div class="side" id="sw"><span class="stone w"></span><span class="who" id="nw">Claude</span><span class="n" id="cw">2</span></div>
+  </div>
+  <p id="status" aria-live="polite">Your move. Dots mark the squares you can play.</p>
+  <div class="board" id="board"><div id="grid" role="grid" aria-label="Reversi board"></div></div>
+  <div class="controls">
+    <div class="seg" role="group" aria-label="Difficulty">
+      <button type="button" data-lvl="easy">easy</button>
+      <button type="button" data-lvl="medium">medium</button>
+      <button type="button" data-lvl="hard">hard</button>
+    </div>
+    <div class="seg" role="group" aria-label="Play as">
+      <button type="button" data-side="1">black</button>
+      <button type="button" data-side="-1">white</button>
+    </div>
+    <label class="chk" for="hints"><input id="hints" type="checkbox" checked> hints</label>
+    <button class="btn" type="button" id="undo">undo</button>
+    <button class="btn" type="button" id="new">new game</button>
+  </div>
+</div>
+<script>
+(() => {
+  const B = 1, Wt = -1;
+  const DIRS = [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]];
+  const WEIGHTS = [
+    120, -20, 20,  5,  5, 20, -20, 120,
+    -20, -40, -5, -5, -5, -5, -40, -20,
+     20,  -5, 15,  3,  3, 15,  -5,  20,
+      5,  -5,  3,  3,  3,  3,  -5,   5,
+      5,  -5,  3,  3,  3,  3,  -5,   5,
+     20,  -5, 15,  3,  3, 15,  -5,  20,
+    -20, -40, -5, -5, -5, -5, -40, -20,
+    120, -20, 20,  5,  5, 20, -20, 120,
+  ];
+  const $ = id => document.getElementById(id);
+  let board, turn, human = B, level = "medium", history = [], last = -1, thinking = false, over = false, token = 0;
+  try { level = localStorage.getItem("reversi-level") || level; human = +(localStorage.getItem("reversi-side") || 1); } catch {}
+
+  // ----- rules -----
+  function flipsFor(b, p, me) {
+    if (b[p]) return null;
+    const x = p & 7, y = p >> 3, out = [];
+    for (const [dx, dy] of DIRS) {
+      let nx = x + dx, ny = y + dy; const run = [];
+      while (nx >= 0 && ny >= 0 && nx < 8 && ny < 8 && b[ny * 8 + nx] === -me) { run.push(ny * 8 + nx); nx += dx; ny += dy; }
+      if (run.length && nx >= 0 && ny >= 0 && nx < 8 && ny < 8 && b[ny * 8 + nx] === me) out.push(...run);
+    }
+    return out.length ? out : null;
+  }
+  function legal(b, me) { const m = []; for (let p = 0; p < 64; p++) if (!b[p] && flipsFor(b, p, me)) m.push(p); return m; }
+  function apply(b, p, me) { const nb = b.slice(), f = flipsFor(b, p, me); nb[p] = me; for (const q of f) nb[q] = me; return nb; }
+  const count = (b, me) => { let n = 0; for (let i = 0; i < 64; i++) if (b[i] === me) n++; return n; };
+
+  // ----- AI: negamax with alpha-beta -----
+  function evaluate(b, me) {
+    let pos = 0, mine = 0, theirs = 0;
+    for (let i = 0; i < 64; i++) { if (b[i] === me) { pos += WEIGHTS[i]; mine++; } else if (b[i] === -me) { pos -= WEIGHTS[i]; theirs++; } }
+    // once a corner is taken, the X and C squares next to it stop being dangerous
+    for (const [c, adj] of [[0, [1, 8, 9]], [7, [6, 15, 14]], [56, [57, 48, 49]], [63, [62, 55, 54]]]) {
+      if (b[c]) for (const a of adj) { if (b[a] === me) pos -= WEIGHTS[a]; else if (b[a] === -me) pos += WEIGHTS[a]; }
+    }
+    const mob = legal(b, me).length - legal(b, -me).length;
+    const empties = 64 - mine - theirs;
+    return pos + mob * 6 + (empties < 16 ? (mine - theirs) * 2 : 0);
+  }
+  let nodes = 0;
+  function negamax(b, me, depth, alpha, beta, passed, exact) {
+    nodes++;
+    if (depth === 0) return exact ? (count(b, me) - count(b, -me)) * 1000 : evaluate(b, me);
+    const moves = legal(b, me);
+    if (!moves.length) {
+      if (passed) { const d = count(b, me) - count(b, -me); return d * 1000 + (d > 0 ? 1e6 : d < 0 ? -1e6 : 0); }
+      return -negamax(b, -me, depth, -beta, -alpha, true, exact);
+    }
+    moves.sort((p, q) => WEIGHTS[q] - WEIGHTS[p]);
+    let best = -Infinity;
+    for (const m of moves) {
+      const v = -negamax(apply(b, m, me), -me, depth - 1, -beta, -alpha, false, exact);
+      if (v > best) best = v;
+      if (v > alpha) alpha = v;
+      if (alpha >= beta) break;
+    }
+    return best;
+  }
+  function choose(b, me) {
+    const moves = legal(b, me); if (moves.length === 1) return moves[0];
+    const empties = b.filter(v => !v).length;
+    let depth = level === "easy" ? 1 : level === "medium" ? 3 : 5, exact = false;
+    if (level === "hard" && empties <= 12) { depth = empties; exact = true; }
+    if (level === "medium" && empties <= 6) { depth = empties; exact = true; }
+    let best = moves[0], bv = -Infinity;
+    for (const m of moves) {
+      let v = -negamax(apply(b, m, me), -me, depth - 1, -Infinity, -bv, false, exact);
+      if (level === "easy") v += (Math.random() - 0.5) * 70;
+      if (v > bv) { bv = v; best = m; }
+    }
+    return best;
+  }
+
+  // ----- UI -----
+  const grid = $("grid"), sqs = [];
+  for (let p = 0; p < 64; p++) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "sq"; b.tabIndex = p === 19 ? 0 : -1; b.dataset.p = p;
+    b.setAttribute("role", "gridcell");
+    b.setAttribute("aria-label", "abcdefgh"[p & 7] + (8 - (p >> 3)));
+    const d = document.createElement("div"); d.className = "disc"; d.hidden = true; b.appendChild(d);
+    b.addEventListener("click", () => play(p));
+    grid.appendChild(b); sqs.push(b);
+  }
+  for (const [x, y] of [[2, 2], [6, 2], [2, 6], [6, 6]]) {
+    const s = document.createElement("span"); s.className = "star"; s.style.left = `calc(3.2% + ${x} * 93.6% / 8)`; s.style.top = `calc(3.2% + ${y} * 93.6% / 8)`;
+    $("board").appendChild(s);
+  }
+  grid.addEventListener("keydown", e => {
+    const p = +document.activeElement.dataset.p; if (Number.isNaN(p)) return;
+    const mv = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -8, ArrowDown: 8 }[e.key]; if (mv == null) return;
+    e.preventDefault(); const q = Math.min(63, Math.max(0, p + mv));
+    sqs[p].tabIndex = -1; sqs[q].tabIndex = 0; sqs[q].focus();
+  });
+
+  function render() {
+    const moves = !over && turn === human && !thinking ? legal(board, human) : [];
+    for (let p = 0; p < 64; p++) {
+      const s = sqs[p], d = s.firstChild, v = board[p];
+      d.hidden = !v; d.classList.toggle("white", v === Wt);
+      s.classList.toggle("legal", moves.includes(p));
+      s.classList.toggle("last", p === last);
+      s.setAttribute("aria-label", "abcdefgh"[p & 7] + (8 - (p >> 3)) + (v === B ? ", black" : v === Wt ? ", white" : moves.includes(p) ? ", playable" : ""));
+    }
+    $("cb").textContent = count(board, B); $("cw").textContent = count(board, Wt);
+    $("sb").classList.toggle("turn", !over && turn === B); $("sw").classList.toggle("turn", !over && turn === Wt);
+    $("nb").textContent = human === B ? "You" : "Claude"; $("nw").textContent = human === Wt ? "You" : "Claude";
+    $("undo").disabled = !history.length || thinking;
+    document.querySelectorAll("[data-lvl]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.lvl === level)));
+    document.querySelectorAll("[data-side]").forEach(b => b.setAttribute("aria-pressed", String(+b.dataset.side === human)));
+  }
+  function status(html) { $("status").innerHTML = html; }
+
+  function play(p) {
+    if (over || thinking || turn !== human || !flipsFor(board, p, human)) return;
+    history.push({ board: board.slice(), last });
+    board = apply(board, p, human); last = p; turn = -human;
+    advance();
+  }
+  function advance() {
+    const mine = legal(board, turn), theirs = legal(board, -turn);
+    if (!mine.length && !theirs.length) return finish();
+    if (!mine.length) {
+      status(turn === human ? "You have no legal moves, so you pass." : "<b>Claude</b> has no legal moves and passes. Your move again.");
+      turn = -turn;
+    }
+    render();
+    if (turn !== human) aiMove();
+    else if (mine.length) status("Your move.");
+  }
+  function aiMove() {
+    thinking = true; render(); status("<b>Claude</b> is thinking…");
+    const my = ++token;
+    setTimeout(() => {
+      if (my !== token) return;
+      const t0 = performance.now(); nodes = 0;
+      const m = choose(board, -human);
+      const wait = Math.max(0, 380 - (performance.now() - t0));
+      setTimeout(() => {
+        if (my !== token) return;
+        board = apply(board, m, -human); last = m; turn = human; thinking = false;
+        const mine = legal(board, human);
+        advance();
+        if (mine.length) status(`<b>Claude</b> played ${"abcdefgh"[m & 7]}${8 - (m >> 3)}. Your move.`);
+      }, wait);
+    }, 30);
+  }
+  function finish() {
+    over = true; render();
+    const b = count(board, B), w = count(board, Wt), me = human === B ? b : w, ai = human === B ? w : b;
+    if (me > ai) {
+      let wins = 0; try { wins = (+localStorage.getItem("reversi-wins-" + level) || 0) + 1; localStorage.setItem("reversi-wins-" + level, wins); } catch {}
+      status(`<b>You win ${me}–${ai}.</b>${wins ? ` That's ${wins} ${wins === 1 ? "win" : "wins"} on ${level}.` : ""}`);
+    }
+    else if (me < ai) status(`<b>Claude wins ${ai}–${me}.</b> Try grabbing corners and giving away edges sparingly.`);
+    else status("<b>A draw, 32–32.</b> That almost never happens.");
+  }
+  function newGame() {
+    token++; thinking = false; over = false; history = []; last = -1;
+    board = new Array(64).fill(0);
+    board[27] = Wt; board[36] = Wt; board[28] = B; board[35] = B;
+    turn = B; render();
+    if (human === Wt) aiMove(); else status("Your move. Dots mark the squares you can play.");
+  }
+  $("new").addEventListener("click", newGame);
+  $("undo").addEventListener("click", () => {
+    if (!history.length || thinking) return;
+    const h = history.pop(); token++; board = h.board; last = h.last; turn = human; over = false; thinking = false;
+    render(); status("Move taken back. Your move.");
+  });
+  document.querySelectorAll("[data-lvl]").forEach(b => b.addEventListener("click", () => { level = b.dataset.lvl; try { localStorage.setItem("reversi-level", level); } catch {} render(); }));
+  document.querySelectorAll("[data-side]").forEach(b => b.addEventListener("click", () => { human = +b.dataset.side; try { localStorage.setItem("reversi-side", human); } catch {} newGame(); }));
+  $("hints").addEventListener("change", e => $("board").classList.toggle("hidehints", !e.target.checked));
+  newGame();
+  window.__reversi = { legal, apply, choose: (b, me, lvl) => { const o = level; level = lvl; const m = choose(b, me); level = o; return m; }, count };
+})();
+</script>
+</body>
+</html>

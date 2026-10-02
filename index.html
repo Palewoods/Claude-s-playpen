@@ -67,9 +67,9 @@
 <body>
 <div class="wrap">
   <header>
-    <span class="eyebrow">palewoods/claude-s-playpen · 4 games · 4 toys · 0 dependencies</span>
+    <span class="eyebrow">palewoods/claude-s-playpen · 8 games · 4 toys · 0 dependencies</span>
     <h1>Claude's Playpen<span class="sq">.</span></h1>
-    <p class="lede">You said <b>"go wild"</b>, then <b>"add more cool games"</b>. So here are eight things I wanted to make: four games you can win or lose, and four toys to just play with. Each one is a single HTML file with no build step. They're all live below, so pick whichever one is moving in the most interesting way.</p>
+    <p class="lede">You said <b>"go wild"</b>, then <b>"add more cool games"</b>, then <b>"add even more games"</b>. So here are twelve things I wanted to make: eight games you can win or lose, and four toys to just play with. Each one is a single HTML file with no build step. They're all live below, so pick whichever one is moving in the most interesting way.</p>
   </header>
 
   <main class="section" aria-label="Games and toys">
@@ -105,6 +105,38 @@
         <h2>Hexsweeper</h2>
         <p>Minesweeper on a honeycomb. Six neighbours instead of eight changes every pattern you thought you knew. The first tap is always safe and it keeps your best times.</p>
         <div class="tags"><span>3 board sizes</span><span>chording</span><span>long-press to flag</span></div>
+      </div>
+    </a>
+    <a class="toy" href="lantern-keeper.html">
+      <div class="win"><canvas data-preview="lantern"></canvas></div>
+      <div class="meta">
+        <h2>Lantern Keeper</h2>
+        <p>Tower defence in a night garden. Moths, wasps and armoured beetles march toward your lantern. Frogs, spiders, fireflies and owls stand in their way. Hold out for 15 waves until dawn.</p>
+        <div class="tags"><span>4 creatures</span><span>3 upgrade levels</span><span>2 boss waves</span></div>
+      </div>
+    </a>
+    <a class="toy" href="debris-field.html">
+      <div class="win"><canvas data-preview="debris"></canvas></div>
+      <div class="meta">
+        <h2>Debris Field</h2>
+        <p>A vector shooter in the spirit of Asteroids. Big rocks split into small fast ones, saucers take potshots at you, and hyperspace is always one panicked keypress away.</p>
+        <div class="tags"><span>endless waves</span><span>sound</span><span>touch pads</span></div>
+      </div>
+    </a>
+    <a class="toy" href="reversi.html">
+      <div class="win"><canvas data-preview="reversi"></canvas></div>
+      <div class="meta">
+        <h2>Reversi</h2>
+        <p>The classic disc-flipping board game against me. Easy plays loose. Hard searches five moves ahead and plays the last twelve moves perfectly. Take the corners if you can.</p>
+        <div class="tags"><span>3 difficulties</span><span>undo</span><span>play either colour</span></div>
+      </div>
+    </a>
+    <a class="toy" href="tall-order.html">
+      <div class="win"><canvas data-preview="tall"></canvas></div>
+      <div class="meta">
+        <h2>Tall Order</h2>
+        <p>A one-button stacking game. Drop each sliding block onto the last one, and whatever overhangs gets sliced off. Perfect drops keep the block whole. Climb past the clouds and into space.</p>
+        <div class="tags"><span>one button</span><span>perfect combos</span><span>best height</span></div>
       </div>
     </a>
   </div>
@@ -146,7 +178,7 @@
   </main>
 
   <footer>
-    <span>Made by Claude, for someone who said "go wild" and then asked for more.</span>
+    <span>Made by Claude, for someone who said "go wild" and then kept asking for more.</span>
     <span>Turn on GitHub Pages for this repo and it's a website. Or just open <code>index.html</code>.</span>
   </footer>
 </div>
@@ -438,7 +470,122 @@
     };
   }
 
-  const kinds = { sand, birds, life, text, golf, delve, cycles, hex };
+  // --- lantern: bugs walking the trail past a few towers ---
+  function lantern(c) {
+    const ctx = c.getContext("2d"); let t = 0;
+    const path = [[-0.05, 0.3], [0.3, 0.3], [0.3, 0.75], [0.65, 0.75], [0.65, 0.4], [0.95, 0.4]];
+    const segs = path.slice(1).map((p, i) => Math.hypot(p[0] - path[i][0], (p[1] - path[i][1]) * 0.56));
+    const total = segs.reduce((a, b) => a + b);
+    const at = d => { for (let i = 0; i < segs.length; i++) { if (d <= segs[i]) { const k = d / segs[i]; return [path[i][0] + (path[i + 1][0] - path[i][0]) * k, path[i][1] + (path[i + 1][1] - path[i][1]) * k]; } d -= segs[i]; } return path[path.length - 1]; };
+    const towers = [[0.18, 0.5, "#6fcf6a"], [0.47, 0.58, "#ffe066"], [0.8, 0.62, "#c99a6b"], [0.47, 0.25, "#b9a7d8"]];
+    return () => {
+      const W = c.width, H = c.height; t += 0.016;
+      ctx.fillStyle = "#12261b"; ctx.fillRect(0, 0, W, H);
+      ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = "#4a3b2a"; ctx.lineWidth = H * 0.11;
+      ctx.beginPath(); path.forEach(([x, y], i) => i ? ctx.lineTo(x * W, y * H) : ctx.moveTo(x * W, y * H)); ctx.stroke();
+      const lx = 0.95 * W, ly = 0.4 * H, g = ctx.createRadialGradient(lx, ly, 0, lx, ly, H * 0.4);
+      g.addColorStop(0, `rgba(255,210,122,${0.55 + Math.sin(t * 9) * 0.04})`); g.addColorStop(1, "rgba(255,210,122,0)");
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = "#ffe2a0"; ctx.fillRect(lx - H * 0.03, ly - H * 0.05, H * 0.06, H * 0.09);
+      for (const [x, y, col] of towers) { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x * W, y * H, H * 0.045, 0, 7); ctx.fill(); }
+      for (let i = 0; i < 9; i++) {
+        const d = ((t * 0.09 + i * 0.13) % 1.1) * total; if (d > total) continue;
+        const [x, y] = at(d), flap = Math.sin(t * 20 + i) * 0.5 + 0.5;
+        ctx.fillStyle = i % 4 === 3 ? "#5a7fa8" : i % 3 === 2 ? "#f2c14e" : "#d9cfb8";
+        ctx.beginPath(); ctx.ellipse(x * W, y * H - H * 0.015, H * 0.025, H * 0.018 * (0.4 + flap), 0, 0, 7); ctx.ellipse(x * W, y * H + H * 0.015, H * 0.025, H * 0.018 * (0.4 + flap), 0, 0, 7); ctx.fill();
+      }
+      // a frog tongue every so often
+      if (Math.sin(t * 3) > 0.7) { const [x, y] = at(((t * 0.09) % 1.1) * total * 0.25 + total * 0.05); ctx.strokeStyle = "#ff8fa8"; ctx.lineWidth = 2 * dpr; ctx.beginPath(); ctx.moveTo(0.18 * W, 0.5 * H); ctx.lineTo(x * W, y * H); ctx.stroke(); }
+    };
+  }
+
+  // --- debris: a little ship spinning and shooting at drifting rocks ---
+  function debrisPv(c) {
+    const ctx = c.getContext("2d"); let t = 0;
+    const rocks = Array.from({ length: 7 }, () => ({ x: Math.random(), y: Math.random(), vx: (Math.random() - 0.5) * 0.002, vy: (Math.random() - 0.5) * 0.002, r: [0.09, 0.05, 0.03][Math.random() * 3 | 0], rot: Math.random() * 6, sh: Array.from({ length: 10 }, () => 0.72 + Math.random() * 0.38) }));
+    const shots = [];
+    return () => {
+      const W = c.width, H = c.height; t += 0.016;
+      ctx.fillStyle = "rgba(2,6,4,0.45)"; ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = "#c8ffe8"; ctx.lineWidth = 1.4 * dpr; ctx.shadowColor = "#7dffc4"; ctx.shadowBlur = 8 * dpr;
+      for (const r of rocks) {
+        r.x = (r.x + r.vx + 1) % 1; r.y = (r.y + r.vy + 1) % 1; r.rot += 0.005;
+        ctx.beginPath(); r.sh.forEach((m, i) => { const a = i / 10 * 6.283 + r.rot, R = r.r * H * m; const X = r.x * W + Math.cos(a) * R, Y = r.y * H + Math.sin(a) * R; i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); }); ctx.closePath(); ctx.stroke();
+      }
+      const a = t * 0.9, sx = W / 2, sy = H / 2;
+      ctx.beginPath(); [[16, 0], [-11, -9], [-6, 0], [-11, 9]].forEach(([px, py], i) => { const X = sx + (px * Math.cos(a) - py * Math.sin(a)) * dpr, Y = sy + (px * Math.sin(a) + py * Math.cos(a)) * dpr; i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); }); ctx.closePath(); ctx.stroke();
+      if (Math.floor(t * 6) !== Math.floor((t - 0.016) * 6)) shots.push({ x: sx, y: sy, vx: Math.cos(a) * 7 * dpr, vy: Math.sin(a) * 7 * dpr, life: 40 });
+      ctx.fillStyle = "#fff";
+      for (const s of shots) { s.x += s.vx; s.y += s.vy; s.life--; ctx.fillRect(s.x - 1, s.y - 1, 2.5 * dpr, 2.5 * dpr); }
+      while (shots.length && shots[0].life <= 0) shots.shift();
+      ctx.shadowBlur = 0;
+    };
+  }
+
+  // --- reversi: a game playing itself out on the wooden board ---
+  function reversiPv(c) {
+    const ctx = c.getContext("2d"), D = [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]];
+    let b, turn, t = 0, wait = 0;
+    const reset = () => { b = new Array(64).fill(0); b[27] = b[36] = -1; b[28] = b[35] = 1; turn = 1; };
+    const flips = (p, me) => { if (b[p]) return []; const x = p & 7, y = p >> 3, out = []; for (const [dx, dy] of D) { let nx = x + dx, ny = y + dy; const run = []; while (nx >= 0 && ny >= 0 && nx < 8 && ny < 8 && b[ny * 8 + nx] === -me) { run.push(ny * 8 + nx); nx += dx; ny += dy; } if (run.length && nx >= 0 && ny >= 0 && nx < 8 && ny < 8 && b[ny * 8 + nx] === me) out.push(...run); } return out; };
+    reset();
+    return () => {
+      const W = c.width, H = c.height; t++;
+      if (t % 28 === 0) {
+        if (wait) { if (--wait === 0) reset(); }
+        else {
+          const moves = []; for (let p = 0; p < 64; p++) { const f = flips(p, turn); if (f.length) moves.push([p, f]); }
+          if (moves.length) { const corner = moves.find(([p]) => [0, 7, 56, 63].includes(p)); const [p, f] = corner || moves[Math.random() * moves.length | 0]; b[p] = turn; f.forEach(q => b[q] = turn); }
+          else if (![-turn].some(me => { for (let p = 0; p < 64; p++) if (flips(p, me).length) return true; return false; })) wait = 4;
+          turn = -turn;
+        }
+      }
+      const bg = "#c89b5e"; ctx.fillStyle = "#2a2118"; ctx.fillRect(0, 0, W, H);
+      const s = Math.min(W, H) * 0.9, ox = (W - s) / 2, oy = (H - s) / 2, cs = s / 8;
+      ctx.fillStyle = bg; ctx.fillRect(ox, oy, s, s);
+      ctx.strokeStyle = "#2b1f1299"; ctx.lineWidth = 1;
+      for (let i = 0; i <= 8; i++) { ctx.beginPath(); ctx.moveTo(ox + i * cs, oy); ctx.lineTo(ox + i * cs, oy + s); ctx.moveTo(ox, oy + i * cs); ctx.lineTo(ox + s, oy + i * cs); ctx.stroke(); }
+      for (let p = 0; p < 64; p++) if (b[p]) {
+        const x = ox + (p & 7) * cs + cs / 2, y = oy + (p >> 3) * cs + cs / 2, g = ctx.createRadialGradient(x - cs * 0.12, y - cs * 0.12, 0, x, y, cs * 0.42);
+        if (b[p] === 1) { g.addColorStop(0, "#5a5d66"); g.addColorStop(1, "#0d0e10"); } else { g.addColorStop(0, "#ffffff"); g.addColorStop(1, "#d7d4cc"); }
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, cs * 0.4, 0, 7); ctx.fill();
+      }
+    };
+  }
+
+  // --- tall: an isometric tower stacking itself ---
+  function tallPv(c) {
+    const ctx = c.getContext("2d"); let stack, cur, t = 0, cam = 0;
+    const reset = () => { stack = [[0, 0, 10, 10], [0, 0, 10, 10], [0, 0, 10, 10]]; cur = null; };
+    reset();
+    return () => {
+      const W = c.width, H = c.height, U = H / 30; t += 0.016;
+      const top = stack[stack.length - 1], axis = stack.length % 2;
+      if (!cur) cur = { off: -14, dir: 1, err: (Math.random() - 0.5) * 3 * (Math.random() < 0.4 ? 0 : 1) };
+      cur.off += cur.dir * 0.35; if (Math.abs(cur.off) > 14) cur.dir *= -1;
+      if (cur.dir > 0 && Math.abs(cur.off - cur.err) < 0.2) {
+        const [x, z, w, d] = top, s = axis ? w : d, keep = s - Math.abs(cur.err);
+        if (keep < 1.5 || stack.length > 24) reset();
+        else { stack.push(axis ? [x + cur.err / 2, z, keep, d] : [x, z + cur.err / 2, w, keep]); cur = null; }
+      }
+      const g = ctx.createLinearGradient(0, 0, 0, H), k = Math.min(1, stack.length / 24);
+      g.addColorStop(0, `hsl(${210 - k * 160}, 55%, ${60 - k * 30}%)`); g.addColorStop(1, `hsl(${200 - k * 180}, 60%, ${80 - k * 25}%)`);
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      cam += ((stack.length * 2 - 10) - cam) * 0.08;
+      const P = (x, y, z) => [W / 2 + (x - z) * 0.866 * U, H * 0.68 + ((x + z) * 0.5 - (y - cam)) * U];
+      const box = (x, y, z, w, d, hue) => {
+        const x0 = x - w / 2, x1 = x + w / 2, z0 = z - d / 2, z1 = z + d / 2, y1 = y + 2;
+        const face = (pts, l) => { ctx.fillStyle = `hsl(${hue}, 60%, ${l}%)`; ctx.beginPath(); pts.forEach((p, i) => { const [X, Y] = P(...p); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); }); ctx.fill(); };
+        face([[x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1]], 66);
+        face([[x0, y1, z1], [x1, y1, z1], [x1, y, z1], [x0, y, z1]], 52);
+        face([[x1, y1, z0], [x1, y1, z1], [x1, y, z1], [x1, y, z0]], 40);
+      };
+      stack.forEach(([x, z, w, d], i) => box(x, i * 2, z, w, d, (20 + i * 9) % 360));
+      if (cur) { const [x, z, w, d] = top; box(axis ? x + cur.off : x, stack.length * 2, axis ? z : z + cur.off, w, d, (20 + stack.length * 9) % 360); }
+    };
+  }
+
+  const kinds = { sand, birds, life, text, golf, delve, cycles, hex, lantern, debris: debrisPv, reversi: reversiPv, tall: tallPv };
   const live = [];
   document.querySelectorAll("canvas[data-preview]").forEach(c => {
     fit(c);
