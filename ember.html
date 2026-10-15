@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ember</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+SC:wght@600;700&family=Inconsolata:wght@400;600&display=swap">
+<style>
+  /* Layout: the well fills the screen; level name and counters in a thin top strip; thumb controls on touch. */
+  :root {
+    --dark: #0a0706;
+    --ink: #f5e6d3;
+    --muted: #9b8574;
+    --flame: #ffb347;
+    --display: "Cormorant SC", "Trajan Pro", Georgia, serif;
+    --mono: "Inconsolata", ui-monospace, Menlo, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--dark); color: var(--ink); font: 15px/1.4 var(--mono); overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .hud { position: fixed; left: 0; right: 0; top: 0; padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 0; display: flex; flex-wrap: wrap; gap: 4px 20px; align-items: baseline; pointer-events: none; }
+  .hud h1 { margin: 0; font: 700 22px/1 var(--display); color: var(--flame); letter-spacing: 0.04em; }
+  .hud span { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .hud b { color: var(--ink); font-weight: 600; }
+  .hud a { margin-left: auto; color: var(--muted); text-decoration: none; pointer-events: auto; }
+  .hud a:hover { color: var(--ink); }
+  .card { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; text-align: center; pointer-events: none; }
+  .card > div { display: grid; gap: 10px; justify-items: center; max-width: 46ch; }
+  .card h2 { margin: 0; font: 700 clamp(34px, 8vw, 64px)/1 var(--display); color: var(--flame); text-shadow: 0 0 24px #ff8a3c66; }
+  .card p { margin: 0; color: var(--muted); }
+  .card .go { color: var(--ink); }
+  .pads { position: fixed; left: 0; right: 0; bottom: 0; padding: 0 16px calc(16px + env(safe-area-inset-bottom, 0px)); display: flex; justify-content: space-between; pointer-events: none; }
+  .pads > div { display: flex; gap: 12px; }
+  .pad { pointer-events: auto; width: 68px; height: 68px; border-radius: 50%; border: 1.5px solid #ffb34755; background: #ffb3470f; color: var(--ink); font: 22px var(--mono); touch-action: none; }
+  .pad.on { background: #ffb34740; }
+  :focus-visible { outline: 2px solid var(--flame); outline-offset: 3px; }
+</style>
+</head>
+<body>
+<canvas id="c" aria-label="Platformer. Arrow keys or A and D to move, space or up to jump. Jump again while touching a wall to wall-jump."></canvas>
+<div class="hud">
+  <h1>Ember</h1>
+  <span id="lname">1 · Kindling</span>
+  <span>sparks <b id="sparks">0</b></span>
+  <span>deaths <b id="deaths">0</b></span>
+  <span>time <b id="time">0.0</b></span>
+  <a href="index.html">&larr; playpen</a>
+</div>
+<div class="card" id="card"><div>
+  <h2 id="c-t">Ember</h2>
+  <p id="c-p">You are the last spark of a dying fire, at the bottom of a cold well. Climb out and light the brazier on every level. Wall-jump, bounce on mushrooms, and don't touch the crystals.</p>
+  <p>←/→ move · space or ↑ jump · jump on a wall to wall-jump · R restart</p>
+  <p class="go" id="c-go">press jump to begin</p>
+</div></div>
+<div class="pads" id="pads" hidden>
+  <div><button class="pad" type="button" data-k="left" aria-label="left">◀</button><button class="pad" type="button" data-k="right" aria-label="right">▶</button></div>
+  <div><button class="pad" type="button" data-k="jump" aria-label="jump">▲</button></div>
+</div>
+<script>
+(() => {
+  // # rock   ^ crystal (deadly)   o mushroom (bounce)   x crumbling ledge   * spark   P start   E brazier
+  const LEVELS = [
+    { name: "Kindling", map: [
+      "                                        ",
+      "                                        ",
+      "                                        ",
+      "                                        ",
+      "                                        ",
+      "                                        ",
+      "                                        ",
+      "                                  *     ",
+      "                         *     ####   E ",
+      "                ###     ###         ####",
+      "         *                              ",
+      "        ###                             ",
+      "  P                ####                 ",
+      "######    ######           ####         ",
+      "######    ######           ####         ",
+      "######    ######           ####         ",
+    ] },
+    { name: "Crystal Floor", map: [
+      "                                        ",
+      "                                        ",
+      "                                        ",
+      "                                        ",
+      "                                        ",
+      "                                        ",
+      "                       *                ",
+      "                      ###           E   ",
+      "               *               #######  ",
+      "              ###                       ",
+      "                         ###            ",
+      "        ###                             ",
+      "  P                ###                  ",
+      "#####^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+      "########################################",
+      "########################################",
+    ] },
+    { name: "Mushroom Hollow", map: [
+      "                                        ",
+      "                                    E   ",
+      "                                  ######",
+      "                                        ",
+      "              *                         ",
+      "             ###        *               ",
+      "                       ###     o        ",
+      "                              ####      ",
+      "                                        ",
+      "         *                              ",
+      "        ###        o                    ",
+      "                  ###                   ",
+      "  P      o                              ",
+      "#####^^^###^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+      "########################################",
+      "########################################",
+    ] },
+    { name: "The Chimney", map: [
+      "##################    ##################",
+      "##################  E ##################",
+      "################## ####  *    ##########",
+      "##################           ###########",
+      "##################   #  #####   ########",
+      "##################   #  #####  #########",
+      "##################   #  #####   ########",
+      "##################   #  #####  #########",
+      "##################   #  #####  #########",
+      "##########     *     #  #####  #########",
+      "##########  ######   #         #########",
+      "##########  ######   #    *    #########",
+      "##  P           ##   ##################",
+      "#######         ##   ##################",
+      "########################################",
+      "########################################",
+    ] },
+    { name: "Crumbling Ledges", map: [
+      "                                        ",
+      "                                        ",
+      "                                        ",
+      "                                        ",
+      "                                      E ",
+      "                     *              ####",
+      "                    xxx                 ",
+      "                              xxx       ",
+      "          *                             ",
+      "         xxx      xxx                   ",
+      "                           *            ",
+      "                          xxx           ",
+      "  P   xxx                               ",
+      "####^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+      "########################################",
+      "########################################",
+    ] },
+    { name: "Two Shafts", map: [
+      "########################################",
+      "#                  #                  E#",
+      "#                  #   *         #######",
+      "#   #########      #  ####  ###        #",
+      "#   #       #      #                   #",
+      "#   #   *   #      #       ####        #",
+      "#   #       #      #  *                #",
+      "#   #       #      # ###          ##   #",
+      "#   #  ##   #  *   #        ###        #",
+      "#   #       #             o            #",
+      "#   ###   ###  ##     ######       ^^^^#",
+      "#       o            ##########^^^######",
+      "#  P  ####         ######################",
+      "#######^^^^^^^#^^^^#####################",
+      "########################################",
+      "########################################",
+    ] },
+    { name: "Glasswork", map: [
+      "                                        ",
+      "                                        ",
+      "                                        ",
+      "             *                        E ",
+      "            ###       ^         *   ####",
+      "                     ###       xxx      ",
+      "                                        ",
+      "      o          ^          ^           ",
+      "     ###        ###        ###          ",
+      "                                        ",
+      "                                        ",
+      "  P       ^^        ^^          o       ",
+      "#####    ####      ####        ###      ",
+      "#####^^^^####^^^^^^####^^^^^^^^###^^^^^^",
+      "########################################",
+      "########################################",
+    ] },
+    { name: "Daylight", map: [
+      "                                     E  ",
+      "                                   #####",
+      "                               *        ",
+      "                              xxx       ",
+      "  ##                     o              ",
+      "  ##           *       ####             ",
+      "  ##          xxx                       ",
+      "  ##   #               ^                ",
+      "  ##   #       ^      ###     o         ",
+      "  ##   #      ###            ###        ",
+      "  ##   #                                ",
+      "  ##   #  *         xxx           ^     ",
+      "  ## P # ###    o                ###    ",
+      "  #######^^^^^^###^^^^^^^^^^^^^^^^^^^^^^",
+      "########################################",
+      "########################################",
+    ] },
+  ];
+
+  const G = 70, JUMP = 21, RUN = 9, ACC = 80, AIR_ACC = 55, FRICTION = 60, WALL_SLIDE = 6, SPRING = 30, COYOTE = 0.1, BUFFER = 0.12;
+  const PW = 0.7, PH = 0.9;
+  const $ = id => document.getElementById(id);
+  const canvas = $("c"), ctx = canvas.getContext("2d"), dpr = Math.min(2, devicePixelRatio || 1);
+  let W, H, TS;
+  function resize() { W = innerWidth; H = innerHeight; canvas.width = W * dpr; canvas.height = H * dpr; if (lvl) fitTiles(); }
+  addEventListener("resize", () => resize());
+
+  let deathsHere = 0, lastDeaths = 0;
+  let lvl, li = 0, grid, cols, rows, P, sparksGot, sparksTotal = 0, totalSparks = 0, deaths = 0, levelT = 0, totalT = 0, mode = "title", crumble, embers = [], deathFx = 0, winFx = 0;
+
+  function load(i) {
+    li = i; lvl = LEVELS[i];
+    rows = lvl.map.length; cols = Math.max(...lvl.map.map(r => r.length));
+    grid = lvl.map.map(r => r.padEnd(cols, " ").split(""));
+    crumble = new Map();
+    sparksTotal = 0;
+    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+      if (grid[y][x] === "P") { lvl.sx = x + 0.5; lvl.sy = y + 1; grid[y][x] = " "; }
+      if (grid[y][x] === "*") sparksTotal++;
+    }
+    lvl.grid0 = grid.map(r => r.slice());
+    spawn(); levelT = 0; sparksGot = 0; deathsHere = 0; lastDeaths = deaths;
+    $("lname").textContent = `${i + 1} · ${lvl.name}`;
+    fitTiles(); hud();
+  }
+  function fitTiles() { TS = Math.min(W / cols, (H - 40) / rows); }
+  function spawn() {
+    grid = lvl.grid0.map(r => r.slice()); crumble.clear(); sparksGot = 0;
+    P = { x: lvl.sx - PW / 2, y: lvl.sy - PH, vx: 0, vy: 0, ground: false, coyote: 0, buffer: 0, wall: 0, face: 1, dead: false, squash: 1 };
+  }
+
+  const tile = (x, y) => (x < 0 || x >= cols) ? "#" : (y < 0 ? " " : y >= rows ? " " : grid[y][x]);
+  const solid = (x, y) => { const t = tile(x, y); return t === "#" || t === "o" || (t === "x" && !(crumble.get(y * cols + x)?.gone)); };
+
+  // ----- physics: resolve x then y against the tile grid -----
+  function moveX(dx) {
+    P.x += dx;
+    const y0 = Math.floor(P.y + 0.01), y1 = Math.floor(P.y + PH - 0.01);
+    if (dx > 0) { const x = Math.floor(P.x + PW); for (let y = y0; y <= y1; y++) if (solid(x, y)) { P.x = x - PW; P.vx = 0; return 1; } }
+    if (dx < 0) { const x = Math.floor(P.x); for (let y = y0; y <= y1; y++) if (solid(x, y)) { P.x = x + 1; P.vx = 0; return -1; } }
+    return 0;
+  }
+  function moveY(dy) {
+    P.y += dy;
+    const x0 = Math.floor(P.x + 0.01), x1 = Math.floor(P.x + PW - 0.01);
+    if (dy > 0) {
+      const y = Math.floor(P.y + PH);
+      for (let x = x0; x <= x1; x++) if (solid(x, y)) {
+        P.y = y - PH;
+        if (tile(x, y) === "o") { P.vy = -SPRING; P.squash = 0.6; bounceFx(x + 0.5, y); return 0; }
+        if (tile(x, y) === "x") { const k = y * cols + x; if (!crumble.has(k)) crumble.set(k, { t: 0.45, gone: false }); }
+        P.vy = 0; return 1;
+      }
+    }
+    if (dy < 0) { const y = Math.floor(P.y); for (let x = x0; x <= x1; x++) if (solid(x, y)) { P.y = y + 1; P.vy = 0; return -1; } }
+    return 0;
+  }
+  function touches(ch) {
+    const out = [];
+    for (let y = Math.floor(P.y + 0.15); y <= Math.floor(P.y + PH - 0.15); y++)
+      for (let x = Math.floor(P.x + 0.12); x <= Math.floor(P.x + PW - 0.12); x++) if (tile(x, y) === ch) out.push([x, y]);
+    return out;
+  }
+  function wallSide() {
+    const y0 = Math.floor(P.y + 0.1), y1 = Math.floor(P.y + PH - 0.1);
+    for (let y = y0; y <= y1; y++) { if (solid(Math.floor(P.x - 0.05), y)) return -1; if (solid(Math.floor(P.x + PW + 0.05), y)) return 1; }
+    return 0;
+  }
+
+  // input: a plain object so the test harness can drive it too
+  const input = { left: false, right: false, jump: false, jumpPressed: false };
+  function step(dt) {
+    if (P.dead) return;
+    const dir = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+    if (dir) P.face = dir;
+    const acc = P.ground ? ACC : AIR_ACC;
+    if (dir) P.vx += dir * acc * dt; else if (P.ground) P.vx -= Math.sign(P.vx) * Math.min(Math.abs(P.vx), FRICTION * dt);
+    P.vx = Math.max(-RUN, Math.min(RUN, P.vx));
+    if (input.jumpPressed) { P.buffer = BUFFER; input.jumpPressed = false; }
+    P.buffer -= dt; P.coyote -= dt;
+    P.wall = P.ground ? 0 : wallSide();
+    if (P.buffer > 0) {
+      if (P.ground || P.coyote > 0) { P.vy = -JUMP; P.buffer = 0; P.coyote = 0; P.ground = false; P.squash = 0.7; puff(); }
+      else if (P.wall) { P.vy = -JUMP * 0.92; P.vx = -P.wall * RUN; P.buffer = 0; P.face = -P.wall; puff(); }
+    }
+    // a short tap gives a short hop
+    if (!input.jump && P.vy < -8 && P.vy > -SPRING + 1) P.vy += G * 1.6 * dt;
+    P.vy += G * dt;
+    if (P.wall && P.vy > WALL_SLIDE && dir === P.wall) P.vy = WALL_SLIDE;
+    P.vy = Math.min(P.vy, 32);
+    const sub = 4;
+    let landed = false;
+    for (let s = 0; s < sub; s++) { moveX(P.vx * dt / sub); if (moveY(P.vy * dt / sub) === 1) landed = true; }
+    if (landed) { if (!P.ground) P.squash = 0.75; P.ground = true; P.coyote = COYOTE; }
+    else { if (P.ground) P.coyote = COYOTE; P.ground = false; }
+    P.squash += (1 - P.squash) * Math.min(1, dt * 12);
+    // crumbling ledges
+    for (const [k, c] of crumble) { c.t -= dt; if (!c.gone && c.t <= 0) { c.gone = true; c.back = 3; } if (c.gone) { c.back -= dt; if (c.back <= 0) crumble.delete(k); } }
+    // hazards and pickups
+    if (touches("^").length || P.y > rows + 1) return die();
+    for (const [x, y] of touches("*")) { grid[y][x] = " "; sparksGot++; for (let i = 0; i < 10; i++) embers.push(ember(x + 0.5, y + 0.5, 4)); }
+    if (touches("E").length) return win();
+  }
+  function die() { if (window.__emberTesting) { P.dead = true; return; } P.dead = true; deaths++; deathFx = 1; for (let i = 0; i < 30; i++) embers.push(ember(P.x + PW / 2, P.y + PH / 2, 9)); setTimeout(() => { if (mode === "play") spawn(); }, 600); hud(); }
+  function win() {
+    if (window.__emberTesting) { P.dead = true; P.won = true; return; }
+    P.dead = true; winFx = 1; totalSparks += sparksGot; totalT += levelT;
+    for (let i = 0; i < 60; i++) embers.push(ember(P.x + PW / 2, P.y, 12));
+    mode = "between";
+    setTimeout(() => {
+      if (li + 1 < LEVELS.length) { load(li + 1); mode = "play"; }
+      else finish();
+    }, 1100);
+  }
+  function finish() {
+    mode = "done";
+    let best = null; try { best = JSON.parse(localStorage.getItem("ember-best") || "null"); } catch {}
+    const isBest = !best || totalT < best.t;
+    if (isBest) try { localStorage.setItem("ember-best", JSON.stringify({ t: totalT, d: deaths })); } catch {}
+    $("c-t").textContent = "Daylight";
+    $("c-p").textContent = `You climbed out of the well in ${totalT.toFixed(1)} seconds with ${deaths} ${deaths === 1 ? "death" : "deaths"}, carrying ${totalSparks} of ${LEVELS.reduce((n, l) => n + l.map.join("").split("*").length - 1, 0)} sparks. ${isBest ? "Your fastest climb yet." : `Your best is ${best.t.toFixed(1)}s.`}`;
+    $("c-go").textContent = "press jump to climb again";
+    $("card").hidden = false;
+  }
+
+  const ember = (x, y, sp) => ({ x, y, vx: (Math.random() - 0.5) * sp, vy: -Math.random() * sp, life: 0.6 + Math.random() * 0.6 });
+  function puff() { for (let i = 0; i < 6; i++) embers.push({ x: P.x + PW / 2, y: P.y + PH, vx: (Math.random() - 0.5) * 4, vy: -Math.random() * 2, life: 0.4, smoke: true }); }
+  function bounceFx(x, y) { for (let i = 0; i < 12; i++) embers.push({ x, y, vx: (Math.random() - 0.5) * 8, vy: -Math.random() * 6, life: 0.5, spore: true }); }
+
+  function hud() {
+    $("sparks").textContent = `${sparksGot}/${sparksTotal}`; $("deaths").textContent = deaths; $("time").textContent = (totalT + levelT).toFixed(1);
+  }
+
+  // ----- drawing -----
+  function draw(t) {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = "#0a0706"; ctx.fillRect(0, 0, W, H);
+    const ox = (W - cols * TS) / 2, oy = Math.max(40, (H - rows * TS) / 2 + 20);
+    ctx.save(); ctx.translate(ox, oy);
+    const px = (P.x + PW / 2) * TS, py = (P.y + PH / 2) * TS;
+    const flick = 1 + Math.sin(t * 13) * 0.04 + Math.sin(t * 31) * 0.02;
+    // the fire's light: everything is lit by distance from the ember
+    const lightR = TS * 7 * flick;
+    // background wall texture inside the light
+    const bg = ctx.createRadialGradient(px, py, 0, px, py, lightR * 1.4);
+    bg.addColorStop(0, "#2a1810"); bg.addColorStop(1, "#0a0706");
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, cols * TS, rows * TS);
+    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+      const c = tile(x, y); if (c === " ") continue;
+      const cx = (x + 0.5) * TS, cy = (y + 0.5) * TS, d = Math.hypot(cx - px, cy - py);
+      const L = Math.max(0.24, 1 - d / (lightR * 1.4));
+      const X = x * TS, Y = y * TS;
+      if (c === "#") {
+        ctx.fillStyle = `rgb(${60 * L + 14}, ${44 * L + 10}, ${36 * L + 9})`; ctx.fillRect(X, Y, TS + 0.5, TS + 0.5);
+        if (tile(x, y - 1) !== "#") { ctx.fillStyle = `rgba(255, 170, 90, ${0.18 + 0.3 * L})`; ctx.fillRect(X, Y, TS + 0.5, Math.max(1, TS * 0.1)); }
+      } else if (c === "x") {
+        const cr = crumble.get(y * cols + x);
+        if (cr?.gone) continue;
+        const shake = cr ? (Math.random() - 0.5) * TS * 0.08 : 0;
+        ctx.fillStyle = `rgb(${90 * L + 12}, ${66 * L + 10}, ${50 * L + 8})`;
+        ctx.fillRect(X + shake + 1, Y + 1, TS - 2, TS * 0.55);
+        ctx.strokeStyle = `rgba(10,7,6,${0.8})`; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(X + TS * 0.3 + shake, Y + 1); ctx.lineTo(X + TS * 0.45 + shake, Y + TS * 0.3); ctx.lineTo(X + TS * 0.35 + shake, Y + TS * 0.55); ctx.stroke();
+      } else if (c === "^") {
+        ctx.fillStyle = `rgba(${150 + 80 * L}, ${200 + 50 * L}, 255, ${0.35 + 0.6 * L})`;
+        ctx.beginPath(); ctx.moveTo(X, Y + TS); ctx.lineTo(X + TS * 0.25, Y + TS * 0.25); ctx.lineTo(X + TS * 0.5, Y + TS); ctx.lineTo(X + TS * 0.72, Y + TS * 0.1); ctx.lineTo(X + TS, Y + TS); ctx.closePath(); ctx.fill();
+      } else if (c === "o") {
+        ctx.fillStyle = `rgb(${200 * L + 30}, ${190 * L + 25}, ${160 * L + 20})`; ctx.fillRect(X + TS * 0.38, Y + TS * 0.45, TS * 0.24, TS * 0.55);
+        ctx.fillStyle = `rgb(${220 * L + 30}, ${70 * L + 15}, ${80 * L + 15})`;
+        ctx.beginPath(); ctx.ellipse(X + TS / 2, Y + TS * 0.5, TS * 0.55, TS * 0.42, 0, Math.PI, 0); ctx.fill();
+        ctx.fillStyle = `rgba(255,240,220,${0.8 * L})`;
+        for (const [a, b] of [[0.3, 0.3], [0.62, 0.22], [0.5, 0.4]]) { ctx.beginPath(); ctx.arc(X + TS * a, Y + TS * b, TS * 0.06, 0, 7); ctx.fill(); }
+      } else if (c === "*") {
+        const bob = Math.sin(t * 4 + x) * TS * 0.08;
+        const g = ctx.createRadialGradient(cx, cy + bob, 0, cx, cy + bob, TS * 0.6);
+        g.addColorStop(0, "rgba(255,230,150,0.95)"); g.addColorStop(0.3, "rgba(255,170,70,0.5)"); g.addColorStop(1, "rgba(255,120,40,0)");
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy + bob, TS * 0.6, 0, 7); ctx.fill();
+      } else if (c === "E") {
+        // the unlit brazier, glowing faintly so you can find it in the dark
+        ctx.fillStyle = "#6b5444"; ctx.fillRect(X + TS * 0.15, Y + TS * 0.45, TS * 0.7, TS * 0.2); ctx.fillRect(X + TS * 0.42, Y + TS * 0.65, TS * 0.16, TS * 0.35);
+        const g = ctx.createRadialGradient(cx, Y + TS * 0.4, 0, cx, Y + TS * 0.4, TS * (1.2 + Math.sin(t * 3) * 0.15));
+        g.addColorStop(0, winFx > 0 ? "rgba(255,200,100,0.9)" : "rgba(255,180,90,0.35)"); g.addColorStop(1, "rgba(255,150,60,0)");
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, Y + TS * 0.4, TS * 1.4, 0, 7); ctx.fill();
+      }
+    }
+    // embers and smoke
+    for (const e of embers) {
+      ctx.globalAlpha = Math.max(0, Math.min(1, e.life * 2));
+      ctx.fillStyle = e.smoke ? "#6b5a50" : e.spore ? "#ffe6c8" : (e.life > 0.5 ? "#ffd27a" : "#ff7a3c");
+      ctx.fillRect(e.x * TS - 1.5, e.y * TS - 1.5, 3, 3);
+    }
+    ctx.globalAlpha = 1;
+    // the flame
+    if (!P.dead || winFx > 0) {
+      const sx = 1 / Math.sqrt(P.squash), sy = P.squash;
+      const fx = px, fy = (P.y + PH) * TS;
+      const glow = ctx.createRadialGradient(fx, fy - TS * 0.4, 0, fx, fy - TS * 0.4, TS * 2.2 * flick);
+      glow.addColorStop(0, "rgba(255,170,80,0.45)"); glow.addColorStop(1, "rgba(255,120,40,0)");
+      ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(fx, fy - TS * 0.4, TS * 2.2, 0, 7); ctx.fill();
+      ctx.save(); ctx.translate(fx, fy); ctx.scale(sx, sy);
+      const lean = -P.vx * 0.012, h = TS * 1.0 * flick;
+      for (const [k, col] of [[1, "#ff6a2a"], [0.72, "#ffb347"], [0.42, "#fff2c4"]]) {
+        ctx.fillStyle = col; ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.bezierCurveTo(-TS * 0.42 * k, 0, -TS * 0.4 * k, -h * 0.55 * k, (lean * TS) * k, -h * k);
+        ctx.bezierCurveTo(TS * 0.4 * k, -h * 0.55 * k, TS * 0.42 * k, 0, 0, 0);
+        ctx.fill();
+      }
+      // eyes
+      ctx.fillStyle = "#2a1006";
+      ctx.fillRect(P.face * TS * 0.05 - TS * 0.13, -TS * 0.36, TS * 0.07, TS * 0.12);
+      ctx.fillRect(P.face * TS * 0.05 + TS * 0.06, -TS * 0.36, TS * 0.07, TS * 0.12);
+      ctx.restore();
+    }
+    ctx.restore();
+    if (deathFx > 0) { ctx.fillStyle = `rgba(120, 180, 255, ${deathFx * 0.15})`; ctx.fillRect(0, 0, W, H); }
+  }
+
+  // ----- input -----
+  const KEYS = { ArrowLeft: "left", a: "left", ArrowRight: "right", d: "right", " ": "jump", ArrowUp: "jump", w: "jump", z: "jump" };
+  function press(k) {
+    if (k === "jump") {
+      if (mode === "title" || mode === "done") { start(); return; }
+      if (!input.jump) input.jumpPressed = true;
+    }
+    input[k] = true;
+  }
+  function release(k) { input[k] = false; }
+  addEventListener("keydown", e => {
+    const k = KEYS[e.key.length === 1 ? e.key.toLowerCase() : e.key];
+    if (k) { e.preventDefault(); if (!e.repeat) press(k); }
+    if ((e.key === "r" || e.key === "R") && mode === "play") { deaths++; spawn(); hud(); }
+    if ((e.key === "n" || e.key === "N") && mode === "play" && deathsHere > 9) { totalT += levelT; load(Math.min(LEVELS.length - 1, li + 1)); }
+  });
+  addEventListener("keyup", e => { const k = KEYS[e.key.length === 1 ? e.key.toLowerCase() : e.key]; if (k) release(k); });
+  addEventListener("blur", () => { input.left = input.right = input.jump = false; });
+  if (matchMedia("(pointer: coarse)").matches) $("pads").hidden = false;
+  document.querySelectorAll(".pad").forEach(p => {
+    const k = p.dataset.k;
+    p.addEventListener("pointerdown", e => { e.preventDefault(); p.setPointerCapture?.(e.pointerId); p.classList.add("on"); press(k); });
+    const off = () => { p.classList.remove("on"); release(k); };
+    p.addEventListener("pointerup", off); p.addEventListener("pointercancel", off); p.addEventListener("lostpointercapture", off);
+  });
+  canvas.addEventListener("pointerdown", () => { if (mode === "title" || mode === "done") start(); });
+
+  function start() { deaths = 0; totalT = 0; totalSparks = 0; load(0); mode = "play"; $("card").hidden = true; }
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(1 / 30, (now - last) / 1000); last = now;
+    const t = now / 1000;
+    if (mode === "play") {
+      step(dt); levelT += P.dead ? 0 : dt;
+      if (deaths !== lastDeaths) { deathsHere++; lastDeaths = deaths; if (deathsHere === 10) $("lname").textContent += " · stuck? press N to skip"; }
+      hud();
+    }
+    for (const e of embers) { e.x += e.vx * dt; e.y += e.vy * dt; e.vy += (e.smoke ? -2 : 8) * dt; e.life -= dt; }
+    embers = embers.filter(e => e.life > 0);
+    deathFx = Math.max(0, deathFx - dt * 2); winFx = Math.max(0, winFx - dt);
+    draw(t);
+    requestAnimationFrame(frame);
+  }
+  resize(); load(0); requestAnimationFrame(frame);
+
+  // test hook: lets an automated checker replay inputs through the real physics
+  window.__ember = { LEVELS, load: i => load(i), step, input, get P() { return P; }, get mode() { return mode; }, set mode(m) { mode = m; }, solid, tile, get cols() { return cols; }, get rows() { return rows; }, spawn, touches };
+})();
+</script>
+</body>
+</html>

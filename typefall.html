@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<title>Typefall</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fragment+Mono&family=Syne:wght@700;800&display=swap">
+<style>
+  /* Layout: rain over a city; score strip on top, the typing line pinned to the bottom above the skyline. */
+  :root {
+    --night: #0c1022;
+    --ink: #e6ecff;
+    --muted: #7d88b0;
+    --hit: #7ff0c8;
+    --gold: #ffd166;
+    --frost: #8ecbff;
+    --boom: #ff7a6b;
+    --display: "Syne", "Futura", system-ui, sans-serif;
+    --mono: "Fragment Mono", ui-monospace, Menlo, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--night); color: var(--ink); font: 15px/1.4 var(--mono); overflow: hidden; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .hud { position: fixed; top: 0; left: 0; right: 0; padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 0; display: flex; flex-wrap: wrap; gap: 4px 20px; align-items: baseline; pointer-events: none; font-variant-numeric: tabular-nums; }
+  .hud h1 { margin: 0; font: 800 22px/1 var(--display); letter-spacing: -0.01em; }
+  .hud span { color: var(--muted); }
+  .hud b { color: var(--ink); font-weight: 400; }
+  .hud a { margin-left: auto; color: var(--muted); text-decoration: none; pointer-events: auto; }
+  .hud a:hover { color: var(--ink); }
+  .line { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(420px, calc(100% - 32px)); }
+  #in {
+    width: 100%; font: 22px var(--mono); color: var(--ink); background: #0c1022cc; border: 1.5px solid #ffffff2a; border-radius: 10px;
+    padding: 10px 14px; text-align: center; outline: none; caret-color: var(--hit);
+  }
+  #in:focus { border-color: var(--hit); }
+  #in.bad { border-color: var(--boom); animation: nudge 0.2s; }
+  @keyframes nudge { 30% { transform: translateX(-6px); } 70% { transform: translateX(6px); } }
+  .card { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; padding: 16px; pointer-events: none; }
+  .card > div { display: grid; gap: 12px; justify-items: center; max-width: 48ch; pointer-events: auto; }
+  .card h2 { margin: 0; font: 800 clamp(44px, 11vw, 96px)/0.9 var(--display); letter-spacing: -0.03em; }
+  .card p { margin: 0; color: var(--muted); }
+  .card .k { color: var(--ink); }
+  .card .g { color: var(--gold); } .card .f { color: var(--frost); } .card .x { color: var(--boom); }
+  .card button { font: 700 16px var(--display); background: var(--hit); color: #0c1022; border: 0; border-radius: 999px; padding: 10px 24px; cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--hit); outline-offset: 3px; }
+</style>
+</head>
+<body>
+<canvas id="c" aria-hidden="true"></canvas>
+<div class="hud">
+  <h1>Typefall</h1>
+  <span>score <b id="score">0</b></span>
+  <span>level <b id="level">1</b></span>
+  <span>combo <b id="combo">×1</b></span>
+  <span>wpm <b id="wpm">0</b></span>
+  <a href="index.html">&larr; playpen</a>
+</div>
+<div class="card" id="card"><div>
+  <h2 id="c-t">Typefall</h2>
+  <p id="c-p">Words are falling on the city. Type each one before it lands. Every word that hits the ground knocks out a building's lights, and when all five go dark, the night is over.</p>
+  <p><span class="g">gold</span> words score triple · type <span class="f">freeze</span> to slow time · type <span class="x">boom</span> to clear the sky</p>
+  <button type="button" id="go">Start typing</button>
+</div></div>
+<div class="line"><input id="in" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Type the falling words here" placeholder="type here"></div>
+<script>
+(() => {
+  const WORDS = ("rain city night neon glow street cab wet echo alley jazz lamp drift fog hum bus tram bridge river dock tower roof spire " +
+    "window shadow siren signal static radio velvet violet amber copper silver chrome glass marble granite concrete asphalt puddle gutter " +
+    "umbrella overcoat lantern beacon harbor ferry subway platform ticket station tunnel elevator stairwell balcony terrace rooftop skyline " +
+    "midnight twilight daybreak thunder lightning drizzle downpour monsoon mist vapor cloud storm breeze gust whisper murmur rumble crackle " +
+    "keyboard typewriter letter ribbon paper ink quill notebook margin chapter story novel poem verse rhyme meter rhythm tempo melody chord " +
+    "piano trumpet saxophone bass drum cymbal violin cello guitar banjo organ choir anthem ballad lullaby nocturne sonata overture encore " +
+    "coffee espresso noodle dumpling pretzel bagel waffle pancake biscuit muffin crumpet toast honey syrup ginger cinnamon nutmeg pepper " +
+    "falcon heron pigeon sparrow raven magpie owl moth beetle cricket firefly spider gecko lizard otter badger fox hedgehog rabbit kitten " +
+    "orbit comet meteor nebula galaxy quasar pulsar planet moon eclipse zenith horizon compass atlas journey voyage harbor island archipelago " +
+    "puzzle riddle cipher secret mystery clue detective alibi suspect witness verdict jury gavel ledger receipt invoice pocket wallet coin " +
+    "quick brown jumps lazy over under around through between beyond across against toward within without before after during always never " +
+    "bright quiet sleepy rapid gentle fierce clever brave curious patient restless tender hollow golden crimson emerald sapphire indigo " +
+    "algorithm function variable constant boolean integer string array object promise callback compile debug refactor deploy commit branch merge " +
+    "zephyr quixotic jubilant kaleidoscope labyrinth mnemonic onomatopoeia serendipity ephemeral luminous mellifluous petrichor sonder").split(" ");
+  const SPECIAL = { freeze: "frost", boom: "boom" };
+  const $ = id => document.getElementById(id);
+  const canvas = $("c"), ctx = canvas.getContext("2d"), dpr = Math.min(2, devicePixelRatio || 1);
+  let W, H, city = [], rain = [];
+  function resize() {
+    W = innerWidth; H = innerHeight; canvas.width = W * dpr; canvas.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // five buildings = five lives
+    city = []; const n = 5, bw = W / n;
+    for (let i = 0; i < n; i++) {
+      const h = H * (0.12 + Math.random() * 0.12), w = bw * (0.7 + Math.random() * 0.25), x = i * bw + (bw - w) / 2;
+      const wins = []; for (let y = 10; y < h - 8; y += 14) for (let xx = 8; xx < w - 8; xx += 12) wins.push([xx, y, Math.random() < 0.7]);
+      city.push({ x, w, h, wins, lit: alive[i] ?? true });
+    }
+    rain = Array.from({ length: Math.floor(W * H / 9000) }, () => ({ x: Math.random() * W, y: Math.random() * H, s: 300 + Math.random() * 300, l: 8 + Math.random() * 10 }));
+  }
+  let alive = [true, true, true, true, true];
+  addEventListener("resize", resize);
+
+  let words = [], bursts = [], score = 0, level = 1, combo = 1, freezeT = 0, spawnT = 0, mode = "title", typed = 0, keys = 0, mistakes = 0, startT = 0, flash = 0, cleared = 0;
+  const input = $("in");
+
+  function pickWord() {
+    if (Math.random() < 0.04 && level >= 2) return Math.random() < 0.5 ? "freeze" : "boom";
+    const maxLen = 4 + level * 1.2;
+    let w; do { w = WORDS[Math.random() * WORDS.length | 0]; } while (w.length > maxLen && Math.random() < 0.85);
+    return w;
+  }
+  function spawn() {
+    const text = pickWord();
+    ctx.font = "20px 'Fragment Mono', monospace";
+    const w = ctx.measureText(text).width;
+    words.push({ text, x: 16 + Math.random() * Math.max(10, W - w - 32), y: 40, w, speed: (22 + level * 7) * (0.85 + Math.random() * 0.3), kind: SPECIAL[text] || (Math.random() < 0.07 ? "gold" : "plain") });
+  }
+  function start() {
+    words = []; bursts = []; score = 0; level = 1; combo = 1; freezeT = 0; spawnT = 0.5; typed = 0; keys = 0; mistakes = 0; cleared = 0;
+    alive = [true, true, true, true, true]; city.forEach(b => b.lit = true);
+    startT = performance.now(); mode = "play"; $("card").hidden = true;
+    input.value = ""; input.focus(); hud();
+  }
+  function target() {
+    const v = input.value.trim().toLowerCase(); if (!v) return null;
+    const m = words.filter(w => w.text.startsWith(v));
+    return m.length ? m.reduce((a, b) => b.y > a.y ? b : a) : null;
+  }
+  input.addEventListener("input", () => {
+    if (mode !== "play") { input.value = ""; return; }
+    keys++;
+    const v = input.value.trim().toLowerCase();
+    if (!v) return;
+    const t = target();
+    if (!t) { mistakes++; combo = 1; input.classList.remove("bad"); void input.offsetWidth; input.classList.add("bad"); input.value = ""; hud(); return; }
+    if (t.text === v) destroy(t);
+  });
+  function destroy(w) {
+    words = words.filter(o => o !== w); input.value = "";
+    typed += w.text.length; cleared++;
+    const pts = w.text.length * 10 * combo * (w.kind === "gold" ? 3 : 1);
+    score += pts; combo = Math.min(8, combo + 1);
+    const col = w.kind === "gold" ? "#ffd166" : w.kind === "frost" ? "#8ecbff" : w.kind === "boom" ? "#ff7a6b" : "#7ff0c8";
+    [...w.text].forEach((ch, i) => bursts.push({ ch, x: w.x + i * (w.w / w.text.length), y: w.y, vx: (Math.random() - 0.5) * 160, vy: -60 - Math.random() * 120, life: 1, col }));
+    if (w.kind === "frost") freezeT = 4.5;
+    if (w.kind === "boom") { flash = 1; for (const o of [...words]) { score += o.text.length * 10; [...o.text].forEach((ch, i) => bursts.push({ ch, x: o.x + i * 12, y: o.y, vx: (Math.random() - 0.5) * 300, vy: -Math.random() * 200, life: 1, col: "#ff7a6b" })); } words = []; }
+    if (cleared % 12 === 0) level++;
+    hud();
+  }
+  function land(w) {
+    words = words.filter(o => o !== w); combo = 1;
+    // the building under the word loses its lights; if it's already dark, the nearest lit one does
+    const cx = w.x + w.w / 2;
+    let idx = city.findIndex(b => cx >= b.x - 10 && cx <= b.x + b.w + 10 && b.lit);
+    if (idx < 0) { let bd = Infinity; city.forEach((b, i) => { if (b.lit) { const d = Math.abs(b.x + b.w / 2 - cx); if (d < bd) { bd = d; idx = i; } } }); }
+    if (idx >= 0) { city[idx].lit = false; alive[idx] = false; }
+    flash = 0.6;
+    if (!city.some(b => b.lit)) end();
+    hud();
+  }
+  function end() {
+    mode = "over"; input.blur();
+    const mins = (performance.now() - startT) / 60000, wpm = Math.round(typed / 5 / Math.max(mins, 0.01)), acc = Math.round(100 * (keys - mistakes) / Math.max(1, keys));
+    let best = 0; try { best = +localStorage.getItem("typefall-best") || 0; } catch {}
+    if (score > best) try { localStorage.setItem("typefall-best", score); } catch {}
+    $("c-t").textContent = "Lights out";
+    $("c-p").textContent = `${score.toLocaleString()} points · ${cleared} words · ${wpm} wpm · ${acc}% accuracy · level ${level}. ${score > best ? "Your best night yet." : `Your best is ${best.toLocaleString()}.`}`;
+    $("go").textContent = "Type again";
+    $("card").hidden = false; $("go").focus();
+  }
+  function hud() {
+    $("score").textContent = score.toLocaleString(); $("level").textContent = level; $("combo").textContent = "×" + combo;
+    const mins = (performance.now() - startT) / 60000; $("wpm").textContent = mode === "play" ? Math.round(typed / 5 / Math.max(mins, 0.05)) : 0;
+  }
+  $("go").addEventListener("click", start);
+  addEventListener("keydown", e => {
+    if (mode !== "play" && e.key === "Enter") { e.preventDefault(); start(); return; }
+    if (mode === "play" && document.activeElement !== input && e.key.length === 1) input.focus();
+    if (e.key === "Escape") input.value = "";
+  });
+  canvas.addEventListener("pointerdown", () => { if (mode === "play") input.focus(); });
+
+  function draw(dt) {
+    ctx.fillStyle = "#0c1022"; ctx.fillRect(0, 0, W, H);
+    const sky = ctx.createLinearGradient(0, 0, 0, H); sky.addColorStop(0, "#0c1022"); sky.addColorStop(1, "#1b1f3e");
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+    // rain
+    ctx.strokeStyle = freezeT > 0 ? "#8ecbff55" : "#8a95c933"; ctx.lineWidth = 1;
+    ctx.beginPath();
+    const rs = freezeT > 0 ? 0.25 : 1;
+    for (const r of rain) { r.y += r.s * dt * rs; r.x -= r.s * 0.12 * dt * rs; if (r.y > H) { r.y = -20; r.x = Math.random() * W * 1.1; } ctx.moveTo(r.x, r.y); ctx.lineTo(r.x + r.l * 0.12, r.y - r.l); }
+    ctx.stroke();
+    // city
+    for (const b of city) {
+      const y = H - b.h;
+      ctx.fillStyle = "#151933"; ctx.fillRect(b.x, y, b.w, b.h);
+      for (const [wx, wy, on] of b.wins) { ctx.fillStyle = b.lit && on ? "#ffd98a" : "#1d2240"; ctx.fillRect(b.x + wx, y + wy, 6, 8); }
+      if (b.lit) { const g = ctx.createRadialGradient(b.x + b.w / 2, y, 0, b.x + b.w / 2, y, b.w); g.addColorStop(0, "#ffd98a14"); g.addColorStop(1, "#ffd98a00"); ctx.fillStyle = g; ctx.fillRect(b.x - b.w / 2, y - b.w, b.w * 2, b.w * 2); }
+    }
+    // words
+    const tgt = mode === "play" ? target() : null, typedLen = input.value.trim().length;
+    ctx.font = "20px 'Fragment Mono', monospace"; ctx.textBaseline = "alphabetic";
+    for (const w of words) {
+      const col = w.kind === "gold" ? "#ffd166" : w.kind === "frost" ? "#8ecbff" : w.kind === "boom" ? "#ff7a6b" : "#e6ecff";
+      if (w.kind !== "plain") { ctx.shadowColor = col; ctx.shadowBlur = 12; }
+      ctx.fillStyle = col; ctx.fillText(w.text, w.x, w.y);
+      ctx.shadowBlur = 0;
+      if (w === tgt) {
+        const part = w.text.slice(0, typedLen);
+        ctx.fillStyle = "#7ff0c8"; ctx.fillText(part, w.x, w.y);
+        ctx.fillRect(w.x, w.y + 5, w.w, 2);
+      }
+    }
+    for (const b of bursts) { ctx.globalAlpha = Math.max(0, b.life); ctx.fillStyle = b.col; ctx.fillText(b.ch, b.x, b.y); }
+    ctx.globalAlpha = 1;
+    if (flash > 0) { ctx.fillStyle = `rgba(255, 122, 107, ${flash * 0.2})`; ctx.fillRect(0, 0, W, H); }
+    if (freezeT > 0) { ctx.fillStyle = `rgba(142, 203, 255, ${Math.min(0.12, freezeT * 0.05)})`; ctx.fillRect(0, 0, W, H); }
+  }
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (mode === "play") {
+      const slow = freezeT > 0 ? 0.3 : 1;
+      freezeT = Math.max(0, freezeT - dt);
+      spawnT -= dt;
+      if (spawnT <= 0) { spawn(); spawnT = Math.max(0.65, 2.3 - level * 0.16) * (0.7 + Math.random() * 0.6); }
+      for (const w of [...words]) { w.y += w.speed * dt * slow; if (w.y > H - Math.min(...city.map(b => b.h)) * 0.6) land(w); }
+      if (Math.floor(now / 500) !== Math.floor((now - dt * 1000) / 500)) hud();
+    } else if (mode === "title" && Math.random() < dt * 0.8) { level = 2; spawn(); level = 1; }
+    if (mode === "title") for (const w of [...words]) { w.y += w.speed * dt * 0.6; if (w.y > H * 0.8) words = words.filter(o => o !== w); }
+    for (const b of bursts) { b.x += b.vx * dt; b.y += b.vy * dt; b.vy += 300 * dt; b.life -= dt * 1.2; }
+    bursts = bursts.filter(b => b.life > 0);
+    flash = Math.max(0, flash - dt * 2);
+    draw(dt);
+    requestAnimationFrame(frame);
+  }
+  resize(); requestAnimationFrame(frame);
+  window.__type = { get words() { return words; }, get state() { return { mode, score, level, lives: city.filter(b => b.lit).length }; }, start, input };
+})();
+</script>
+</body>
+</html>

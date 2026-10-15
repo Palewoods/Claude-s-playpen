@@ -54,6 +54,17 @@
   .section { display: grid; gap: 16px; }
   .section h2.sh { font: 800 13px var(--mono); text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted); margin: 0; display: flex; gap: 12px; align-items: center; }
   .section h2.sh::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  .hdr-acts { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+  #surprise { font: 500 15px var(--display); color: var(--bg); background: var(--accent); border: 0; border-radius: 999px; padding: 10px 20px; cursor: pointer; transition: transform 0.15s; }
+  #surprise:hover { transform: rotate(-2deg) scale(1.04); }
+  #surprise:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+  .secret { font: 12px var(--mono); color: var(--muted); }
+  body.party .win canvas { animation: party 2s linear infinite; }
+  body.party h1 { animation: party 3s linear infinite; }
+  @keyframes party { to { filter: hue-rotate(360deg); } }
+  .confetti { position: fixed; top: -20px; font-size: 22px; pointer-events: none; z-index: 10; animation: fall linear forwards; }
+  @keyframes fall { to { transform: translateY(110vh) rotate(720deg); } }
+  @media (prefers-reduced-motion: reduce) { body.party .win canvas, body.party h1, .confetti { animation: none; } #surprise { transition: none; } }
   .meta { padding: 16px 18px 18px; display: grid; gap: 6px; align-content: start; }
   .meta h2 { font: 500 20px/1.2 var(--display); margin: 0; letter-spacing: -0.01em; }
   .meta p { margin: 0; color: var(--muted); font-size: 15.5px; }
@@ -67,9 +78,10 @@
 <body>
 <div class="wrap">
   <header>
-    <span class="eyebrow">palewoods/claude-s-playpen · 8 games · 4 toys · 0 dependencies</span>
+    <span class="eyebrow">palewoods/claude-s-playpen · 12 games · 4 toys · 4 odds &amp; ends · 0 dependencies</span>
     <h1>Claude's Playpen<span class="sq">.</span></h1>
-    <p class="lede">You said <b>"go wild"</b>, then <b>"add more cool games"</b>, then <b>"add even more games"</b>. So here are twelve things I wanted to make: eight games you can win or lose, and four toys to just play with. Each one is a single HTML file with no build step. They're all live below, so pick whichever one is moving in the most interesting way.</p>
+    <p class="lede">You said <b>"go wild"</b>, then <b>"add more cool games"</b>, then <b>"add even more games"</b>, then <b>"add even more games and more random stuff"</b>. So here are twenty things I wanted to make: twelve games you can win or lose, four toys to play with, and four odds and ends that didn't fit anywhere else. Each one is a single HTML file with no build step. They're all live below, so pick whichever one is moving in the most interesting way.</p>
+    <div class="hdr-acts"><button type="button" id="surprise">Surprise me</button><span class="secret">There's also a secret on this page.</span></div>
   </header>
 
   <main class="section" aria-label="Games and toys">
@@ -139,6 +151,38 @@
         <div class="tags"><span>one button</span><span>perfect combos</span><span>best height</span></div>
       </div>
     </a>
+    <a class="toy" href="ember.html">
+      <div class="win"><canvas data-preview="ember"></canvas></div>
+      <div class="meta">
+        <h2>Ember</h2>
+        <p>A precision platformer. You're the last spark of a dying fire at the bottom of a cold well. Wall-jump up chimneys, bounce on mushrooms, dodge crystals, and light the brazier on each of eight levels.</p>
+        <div class="tags"><span>8 levels</span><span>wall jumps</span><span>speedrun timer</span></div>
+      </div>
+    </a>
+    <a class="toy" href="solitaire.html">
+      <div class="win"><canvas data-preview="sol"></canvas></div>
+      <div class="meta">
+        <h2>Solitaire</h2>
+        <p>Klondike, the way you remember it: drag-and-drop or tap to auto-move, draw one or draw three, unlimited undo, hints, and the bouncing-cards finale when you win.</p>
+        <div class="tags"><span>draw 1 or 3</span><span>undo</span><span>the bouncing cards</span></div>
+      </div>
+    </a>
+    <a class="toy" href="typefall.html">
+      <div class="win"><canvas data-preview="typefall"></canvas></div>
+      <div class="meta">
+        <h2>Typefall</h2>
+        <p>Words fall on a rainy city, so type them before they land. Each miss knocks out a building's lights. Gold words score triple, and the words freeze and boom are power-ups.</p>
+        <div class="tags"><span>typing</span><span>wpm and accuracy</span><span>power-ups</span></div>
+      </div>
+    </a>
+    <a class="toy" href="crate-expectations.html">
+      <div class="win"><canvas data-preview="crates"></canvas></div>
+      <div class="meta">
+        <h2>Crate Expectations</h2>
+        <p>Push the crates onto the markers. You can push but never pull. All ten levels were generated backwards from the solved position, so every one is solvable and shows the true minimum number of pushes.</p>
+        <div class="tags"><span>10 levels</span><span>undo</span><span>tap to walk</span></div>
+      </div>
+    </a>
   </div>
   <h2 class="sh">Toys</h2>
   <div class="shelf">
@@ -175,10 +219,45 @@
       </div>
     </a>
   </div>
+  <h2 class="sh">Odds &amp; ends</h2>
+  <div class="shelf">
+    <a class="toy" href="pipes.html">
+      <div class="win"><canvas data-preview="pipes"></canvas></div>
+      <div class="meta">
+        <h2>Pipes</h2>
+        <p>The 3D pipes screensaver, rebuilt from memory. Coloured pipes grow through a slowly turning cube until it fills up, then everything starts over. Keep an eye out for the teapot.</p>
+        <div class="tags"><span>screensaver</span><span>3D</span><span>rare teapots</span></div>
+      </div>
+    </a>
+    <a class="toy" href="desk-cat.html">
+      <div class="win"><canvas data-preview="cat"></canvas></div>
+      <div class="meta">
+        <h2>Biscuit the Desk Cat</h2>
+        <p>Biscuit lives in a small room whose window follows your local time of day. Biscuit follows your pointer, chases yarn, eats fish, purrs when petted, and naps when ignored.</p>
+        <div class="tags"><span>pet the cat</span><span>yarn physics</span><span>naps</span></div>
+      </div>
+    </a>
+    <a class="toy" href="absurd-units.html">
+      <div class="win"><canvas data-preview="units"></canvas></div>
+      <div class="meta">
+        <h2>Absurd Units</h2>
+        <p>A converter for units that matter. How many bananas is 100 metres? How many microcenturies is a meeting? How many floppy disks is your phone?</p>
+        <div class="tags"><span>bananas</span><span>smoots</span><span>hogsheads</span></div>
+      </div>
+    </a>
+    <a class="toy" href="fortune-cookie.html">
+      <div class="win"><canvas data-preview="cookie"></canvas></div>
+      <div class="meta">
+        <h2>Fortune Cookie</h2>
+        <p>Crack open a cookie for a fortune, six lucky numbers and an unusual English word. About half the fortunes are handwritten and the rest are assembled from parts.</p>
+        <div class="tags"><span>fortunes</span><span>lucky numbers</span><span>word of the cookie</span></div>
+      </div>
+    </a>
+  </div>
   </main>
 
   <footer>
-    <span>Made by Claude, for someone who said "go wild" and then kept asking for more.</span>
+    <span>Made by Claude, for someone who said "go wild" and then kept asking for more. (And yes, the teapot in Pipes is real.)</span>
     <span>Turn on GitHub Pages for this repo and it's a website. Or just open <code>index.html</code>.</span>
   </footer>
 </div>
@@ -585,7 +664,200 @@
     };
   }
 
-  const kinds = { sand, birds, life, text, golf, delve, cycles, hex, lantern, debris: debrisPv, reversi: reversiPv, tall: tallPv };
+  // --- ember: a flame hopping up ledges in the dark ---
+  function emberPv(c) {
+    const ctx = c.getContext("2d"); let t = 0;
+    const ledges = [[0.12, 0.85], [0.32, 0.68], [0.52, 0.52], [0.72, 0.36], [0.88, 0.2]];
+    return () => {
+      const W = c.width, H = c.height; t += 0.016;
+      const k = (t * 0.7) % ledges.length, i = Math.floor(k), f = k - i;
+      const a = ledges[i], b = ledges[(i + 1) % ledges.length];
+      let fx = a[0] + (b[0] - a[0]) * f, fy = a[1] + (b[1] - a[1]) * f - Math.sin(f * Math.PI) * 0.18;
+      if (i === ledges.length - 1) { fx = a[0]; fy = a[1]; }
+      const px = fx * W, py = fy * H - H * 0.02;
+      const bg = ctx.createRadialGradient(px, py, 0, px, py, H * 0.7); bg.addColorStop(0, "#2a1810"); bg.addColorStop(1, "#0a0706");
+      ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+      for (const [lx, ly] of ledges) { const d = Math.hypot(lx * W - px, ly * H - py) / H, L = Math.max(0.1, 1 - d * 1.3); ctx.fillStyle = `rgb(${60 * L + 14},${44 * L + 10},${36 * L + 9})`; ctx.fillRect((lx - 0.07) * W, ly * H, 0.14 * W, H * 0.05); ctx.fillStyle = `rgba(255,170,90,${0.4 * L})`; ctx.fillRect((lx - 0.07) * W, ly * H, 0.14 * W, H * 0.008); }
+      ctx.fillStyle = `rgba(150,210,255,0.6)`; for (let x = 0.2; x < 0.95; x += 0.06) { ctx.beginPath(); ctx.moveTo(x * W, H); ctx.lineTo((x + 0.015) * W, H * 0.93); ctx.lineTo((x + 0.03) * W, H); ctx.fill(); }
+      const bx = ledges[ledges.length - 1][0] * W, by = ledges[ledges.length - 1][1] * H, lit = i === ledges.length - 1;
+      const bg2 = ctx.createRadialGradient(bx, by - H * 0.04, 0, bx, by - H * 0.04, H * 0.15); bg2.addColorStop(0, lit ? "rgba(255,200,100,0.9)" : "rgba(255,180,90,0.3)"); bg2.addColorStop(1, "rgba(255,150,60,0)");
+      ctx.fillStyle = bg2; ctx.beginPath(); ctx.arc(bx, by - H * 0.04, H * 0.15, 0, 7); ctx.fill();
+      const s = H * 0.075, fl = 1 + Math.sin(t * 13) * 0.05;
+      const gl = ctx.createRadialGradient(px, py, 0, px, py, s * 3); gl.addColorStop(0, "rgba(255,170,80,0.45)"); gl.addColorStop(1, "rgba(255,120,40,0)"); ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(px, py, s * 3, 0, 7); ctx.fill();
+      for (const [kk, col] of [[1, "#ff6a2a"], [0.7, "#ffb347"], [0.4, "#fff2c4"]]) { ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(px, py); ctx.bezierCurveTo(px - s * 0.5 * kk, py, px - s * 0.45 * kk, py - s * 0.6 * kk * fl, px, py - s * 1.2 * kk * fl); ctx.bezierCurveTo(px + s * 0.45 * kk, py - s * 0.6 * kk * fl, px + s * 0.5 * kk, py, px, py); ctx.fill(); }
+    };
+  }
+
+  // --- solitaire: the bouncing-cards finale, trails and all ---
+  function solPv(c) {
+    const ctx = c.getContext("2d"); let card = null, n = 0;
+    const S = ["♠", "♥", "♦", "♣"], R = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
+    const reset = () => { ctx.fillStyle = "#1f2a3d"; ctx.fillRect(0, 0, c.width, c.height); n = 0; };
+    reset();
+    return () => {
+      const W = c.width, H = c.height, cw = W * 0.09, ch = cw * 1.4;
+      if (!card || card.x < -cw || card.x > W) {
+        if (++n > 26) reset();
+        const f = n % 4; card = { x: W * (0.55 + f * 0.11), y: H * 0.06, vx: (Math.random() < 0.6 ? -1 : 1) * W * (0.004 + Math.random() * 0.006), vy: -Math.random() * H * 0.01, s: f, r: 12 - (Math.floor(n / 4) % 13) };
+      }
+      for (let k = 0; k < 2; k++) {
+        card.vy += H * 0.0012; card.x += card.vx; card.y += card.vy;
+        if (card.y + ch > H) { card.y = H - ch; card.vy *= -0.78; }
+        ctx.fillStyle = "#fbf6ea"; ctx.strokeStyle = "#d9cfb8"; ctx.lineWidth = 1; ctx.fillRect(card.x, card.y, cw, ch); ctx.strokeRect(card.x, card.y, cw, ch);
+        ctx.fillStyle = card.s === 1 || card.s === 2 ? "#b3261e" : "#1d1b19";
+        ctx.font = `700 ${cw * 0.28}px Georgia, serif`; ctx.textAlign = "left"; ctx.textBaseline = "top"; ctx.fillText(R[card.r], card.x + cw * 0.08, card.y + ch * 0.05);
+        ctx.font = `${cw * 0.5}px Georgia, serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(S[card.s], card.x + cw / 2, card.y + ch / 2);
+      }
+    };
+  }
+
+  // --- typefall: words dropping onto a skyline ---
+  function typePv(c) {
+    const ctx = c.getContext("2d"); let t = 0, words = [];
+    const pool = ["rain", "neon", "midnight", "freeze", "lantern", "harbor", "boom", "velvet", "comet", "typewriter", "echo", "jazz"];
+    const blds = Array.from({ length: 6 }, (_, i) => ({ x: i / 6, w: 0.13 + Math.random() * 0.03, h: 0.18 + Math.random() * 0.14, lit: true }));
+    return () => {
+      const W = c.width, H = c.height; t += 0.016;
+      if (Math.random() < 0.025) words.push({ w: pool[Math.random() * pool.length | 0], x: 0.05 + Math.random() * 0.7, y: 0.05, typed: 0, sp: 0.0015 + Math.random() * 0.001 });
+      const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "#0c1022"); g.addColorStop(1, "#1b1f3e"); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = "#8a95c933"; ctx.beginPath(); for (let i = 0; i < 40; i++) { const x = ((i * 97 + t * 40) % W), y = ((i * 53 + t * 300) % H); ctx.moveTo(x, y); ctx.lineTo(x + 1, y - 9); } ctx.stroke();
+      for (const b of blds) { const y = H * (1 - b.h); ctx.fillStyle = "#151933"; ctx.fillRect(b.x * W, y, b.w * W, b.h * H); ctx.fillStyle = b.lit ? "#ffd98a" : "#1d2240"; for (let yy = y + 6 * dpr; yy < H - 6; yy += 10 * dpr) for (let xx = b.x * W + 5 * dpr; xx < (b.x + b.w) * W - 6; xx += 9 * dpr) ctx.fillRect(xx, yy, 3 * dpr, 4 * dpr); }
+      ctx.font = `${14 * dpr}px "Fragment Mono", ui-monospace, monospace`; ctx.textBaseline = "alphabetic";
+      for (const w of words) {
+        w.y += w.sp; if (w.y > 0.25 && Math.random() < 0.06) w.typed++;
+        const col = w.w === "freeze" ? "#8ecbff" : w.w === "boom" ? "#ff7a6b" : "#e6ecff";
+        ctx.fillStyle = col; ctx.fillText(w.w, w.x * W, w.y * H); ctx.fillStyle = "#7ff0c8"; ctx.fillText(w.w.slice(0, w.typed), w.x * W, w.y * H);
+      }
+      words = words.filter(w => w.typed < w.w.length && w.y < 0.72);
+    };
+  }
+
+  // --- crates: a robot pushing a crate onto its marker, over and over ---
+  function cratesPv(c) {
+    const ctx = c.getContext("2d"); let t = 0;
+    const M = ["#########", "#       #", "#   #   #", "#       #", "#########"];
+    return () => {
+      const W = c.width, H = c.height, T = Math.min(W / 9, H / 5), ox = (W - T * 9) / 2, oy = (H - T * 5) / 2; t += 0.016;
+      const phase = (t * 0.5) % 2, f = Math.min(1, phase), back = phase > 1;
+      ctx.fillStyle = "#16171a"; ctx.fillRect(0, 0, W, H);
+      for (let y = 0; y < 5; y++) for (let x = 0; x < 9; x++) {
+        const X = ox + x * T, Y = oy + y * T;
+        if (M[y][x] === "#") { ctx.fillStyle = "#545b6a"; ctx.fillRect(X + 1, Y + 1, T - 2, T - 2); ctx.fillStyle = "#6a7283"; ctx.fillRect(X + 1, Y + 1, T - 2, T * 0.6); }
+        else { ctx.fillStyle = (x + y) % 2 ? "#2a2b30" : "#26272b"; ctx.fillRect(X, Y, T, T); }
+      }
+      const gx = 6, gy = 3; ctx.strokeStyle = "#ff7a63"; ctx.lineWidth = T * 0.07; ctx.beginPath(); ctx.arc(ox + (gx + 0.5) * T, oy + (gy + 0.5) * T, T * 0.22, 0, 7); ctx.stroke();
+      const cx = back ? 6 : 2 + f * 4, rx = back ? 5 - (phase - 1) * 4 : 1 + f * 4;
+      const on = !back && f >= 1 || back;
+      ctx.fillStyle = on && cx >= 6 ? "#4fd1a0" : "#c98b3c"; ctx.fillRect(ox + cx * T + T * 0.08, oy + gy * T + T * 0.08, T * 0.84, T * 0.84);
+      ctx.strokeStyle = "#00000044"; ctx.lineWidth = T * 0.06; ctx.beginPath(); ctx.moveTo(ox + cx * T + T * 0.2, oy + gy * T + T * 0.2); ctx.lineTo(ox + cx * T + T * 0.8, oy + gy * T + T * 0.8); ctx.moveTo(ox + cx * T + T * 0.8, oy + gy * T + T * 0.2); ctx.lineTo(ox + cx * T + T * 0.2, oy + gy * T + T * 0.8); ctx.stroke();
+      ctx.fillStyle = "#6ea3ff"; ctx.fillRect(ox + rx * T + T * 0.2, oy + gy * T + T * 0.25, T * 0.6, T * 0.5);
+      ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(ox + rx * T + T * 0.42, oy + gy * T + T * 0.45, T * 0.07, 0, 7); ctx.arc(ox + rx * T + T * 0.62, oy + gy * T + T * 0.45, T * 0.07, 0, 7); ctx.fill();
+      if (back) { ctx.globalAlpha = 0.9; ctx.fillStyle = "#4fd1a0"; ctx.font = `700 ${T * 0.4}px system-ui`; ctx.textAlign = "center"; ctx.fillText("solved", ox + 4.5 * T, oy + T * 1.6); ctx.globalAlpha = 1; }
+    };
+  }
+
+  // --- pipes: a small cube of growing pipes ---
+  function pipesPv(c) {
+    const ctx = c.getContext("2d"), N = 8, D = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+    let occ, segs, heads, t = 0;
+    const reset = () => { occ = new Set(); segs = []; heads = []; for (let i = 0; i < 3; i++) heads.push({ p: [Math.random() * N | 0, Math.random() * N | 0, Math.random() * N | 0], d: D[Math.random() * 6 | 0], hue: [0, 120, 210, 45, 290][Math.random() * 5 | 0] }); };
+    reset();
+    return () => {
+      const W = c.width, H = c.height; t += 0.016;
+      if (Math.floor(t * 14) !== Math.floor((t - 0.016) * 14)) for (const h of heads) {
+        const opts = D.filter(d => { const n = h.p.map((v, i) => v + d[i]); return n.every(v => v >= 0 && v < N) && !occ.has(n.join()); });
+        if (!opts.length) { h.p = [Math.random() * N | 0, Math.random() * N | 0, Math.random() * N | 0]; continue; }
+        if (!opts.includes(h.d) || Math.random() < 0.25) h.d = opts[Math.random() * opts.length | 0];
+        const n = h.p.map((v, i) => v + h.d[i]); segs.push([h.p, n, h.hue]); occ.add(n.join()); h.p = n;
+        if (segs.length > 150) reset();
+      }
+      ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H);
+      const yaw = t * 0.15 + 0.6, P = ([x, y, z]) => { x -= 3.5; y -= 3.5; z -= 3.5; const X = x * Math.cos(yaw) - z * Math.sin(yaw), Z = x * Math.sin(yaw) + z * Math.cos(yaw), Y = y * 0.95 - Z * 0.3, ZZ = y * 0.3 + Z * 0.95, f = H * 1.1 / (ZZ + 16); return [W / 2 + X * f, H / 2 - Y * f, ZZ, f]; };
+      const items = segs.map(([a, b, hue]) => { const A = P(a), B = P(b); return [A, B, hue, (A[2] + B[2]) / 2]; }).sort((p, q) => q[3] - p[3]);
+      ctx.lineCap = "round";
+      for (const [A, B, hue] of items) {
+        const r = A[3] * 0.24;
+        ctx.strokeStyle = `hsl(${hue},80%,18%)`; ctx.lineWidth = r * 2; ctx.beginPath(); ctx.moveTo(A[0], A[1]); ctx.lineTo(B[0], B[1]); ctx.stroke();
+        ctx.strokeStyle = `hsl(${hue},75%,45%)`; ctx.lineWidth = r * 1.4; ctx.stroke();
+        ctx.strokeStyle = `hsl(${hue},90%,78%)`; ctx.lineWidth = r * 0.35; ctx.beginPath(); ctx.moveTo(A[0] - r * 0.4, A[1] - r * 0.4); ctx.lineTo(B[0] - r * 0.4, B[1] - r * 0.4); ctx.stroke();
+      }
+    };
+  }
+
+  // --- cat: Biscuit sitting by the window, tail going ---
+  function catPv(c) {
+    const ctx = c.getContext("2d"); let t = 0;
+    return () => {
+      const W = c.width, H = c.height, s = H / 140; t += 0.016;
+      ctx.fillStyle = "#f2dfbf"; ctx.fillRect(0, 0, W, H * 0.78); ctx.fillStyle = "#00000008"; for (let x = 0; x < W; x += 30 * s) ctx.fillRect(x, 0, 12 * s, H * 0.78);
+      ctx.fillStyle = "#6b4a2f"; ctx.fillRect(W * 0.6, H * 0.12, W * 0.26, H * 0.4); ctx.fillStyle = "#9fd0f0"; ctx.fillRect(W * 0.6 + 5 * s, H * 0.12 + 5 * s, W * 0.26 - 10 * s, H * 0.4 - 10 * s);
+      ctx.fillStyle = "#6b4a2f"; ctx.fillRect(W * 0.73 - 2 * s, H * 0.12, 4 * s, H * 0.4); ctx.fillRect(W * 0.6, H * 0.32 - 2 * s, W * 0.26, 4 * s);
+      ctx.fillStyle = "#a87a4f"; ctx.fillRect(0, H * 0.78, W, H * 0.22);
+      ctx.save(); ctx.translate(W * 0.36, H * 0.8); ctx.scale(s, s);
+      ctx.strokeStyle = "#4a2e1a"; ctx.lineWidth = 2.5; ctx.lineCap = "round"; ctx.lineJoin = "round";
+      const sw = Math.sin(t * 2) * 10;
+      ctx.strokeStyle = "#e89a4f"; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(-14, -6); ctx.quadraticCurveTo(-46, -2, -40 + sw * 0.3, -26 + sw * 0.4); ctx.stroke();
+      ctx.strokeStyle = "#4a2e1a"; ctx.lineWidth = 2.5;
+      ctx.fillStyle = "#e89a4f"; ctx.beginPath(); ctx.ellipse(-2, -30, 24, 30, -0.12, 0, 7); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "#fbe3c4"; ctx.beginPath(); ctx.ellipse(8, -26, 10, 18, -0.1, 0, 7); ctx.fill();
+      const hx = 12, hy = -64;
+      ctx.fillStyle = "#e89a4f";
+      ctx.beginPath(); ctx.moveTo(hx - 12, hy - 8); ctx.lineTo(hx - 9, hy - 26); ctx.lineTo(hx - 1, hy - 13); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(hx + 4, hy - 13); ctx.lineTo(hx + 12, hy - 26); ctx.lineTo(hx + 15, hy - 8); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(hx + 1, hy, 17, 14, 0, 0, 7); ctx.fill(); ctx.stroke();
+      const blink = (t % 4) < 0.15;
+      ctx.fillStyle = "#4a2e1a";
+      for (const ex of [hx - 3, hx + 9]) { if (blink) { ctx.fillRect(ex - 3, hy - 2, 6, 1.5); } else { ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.ellipse(ex, hy - 2, 3.4, 4.4, 0, 0, 7); ctx.fill(); ctx.fillStyle = "#4a2e1a"; ctx.beginPath(); ctx.ellipse(ex + 0.8, hy - 2, 1.8, 3.4, 0, 0, 7); ctx.fill(); } }
+      ctx.fillStyle = "#e0777f"; ctx.beginPath(); ctx.moveTo(hx + 5, hy + 3); ctx.lineTo(hx + 9, hy + 3); ctx.lineTo(hx + 7, hy + 6); ctx.fill();
+      ctx.restore();
+      const yx = W * 0.62 + Math.sin(t * 0.8) * W * 0.1;
+      ctx.fillStyle = "#7a5cc8"; ctx.beginPath(); ctx.arc(yx, H * 0.86, 9 * s, 0, 7); ctx.fill();
+    };
+  }
+
+  // --- units: a parade of bananas measuring a football pitch ---
+  function unitsPv(c) {
+    const ctx = c.getContext("2d"); let t = 0;
+    return () => {
+      const W = c.width, H = c.height; t += 0.016;
+      ctx.fillStyle = "#3a2220"; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = "#fde4da"; ctx.font = `400 ${H * 0.13}px "Rammetto One", Georgia, serif`; ctx.textAlign = "left"; ctx.textBaseline = "top";
+      ctx.fillText("100 m =", W * 0.06, H * 0.1);
+      const n = Math.min(583, Math.floor(t * 40) % 640);
+      ctx.fillStyle = "#ff7a52"; ctx.fillText(`${Math.min(n, 556)} bananas`, W * 0.06, H * 0.27);
+      ctx.font = `${H * 0.11}px system-ui, sans-serif`; ctx.textBaseline = "middle";
+      const per = Math.floor(W / (H * 0.12)), shown = Math.min(per * 3, Math.floor(Math.min(n, 556) / 556 * per * 3));
+      for (let i = 0; i < shown; i++) ctx.fillText("🍌", W * 0.04 + (i % per) * H * 0.12, H * (0.58 + Math.floor(i / per) * 0.14));
+    };
+  }
+
+  // --- cookie: cracks open, slip slides out, closes again ---
+  function cookiePv(c) {
+    const ctx = c.getContext("2d"); let t = 0;
+    const lines = ["You will soon refactor something", "that did not need refactoring."];
+    return () => {
+      const W = c.width, H = c.height; t += 0.016;
+      const ph = (t % 5) / 5, open = ph < 0.2 ? 0 : ph < 0.3 ? (ph - 0.2) * 10 : ph < 0.9 ? 1 : (1 - ph) * 10;
+      ctx.fillStyle = "#142019"; ctx.fillRect(0, 0, W, H);
+      const cx = W / 2, cy = H * 0.42, s = H * 0.0028;
+      if (open > 0.3) {
+        const sw = W * 0.62 * Math.min(1, (open - 0.3) / 0.7);
+        ctx.fillStyle = "#fffdf6"; ctx.fillRect(cx - sw / 2, H * 0.68, sw, H * 0.2);
+        ctx.fillStyle = "#2a2620"; ctx.font = `700 ${H * 0.06}px "Courier Prime", monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.save(); ctx.beginPath(); ctx.rect(cx - sw / 2, H * 0.68, sw, H * 0.2); ctx.clip();
+        ctx.fillText(lines[0], cx, H * 0.75); ctx.fillText(lines[1], cx, H * 0.82); ctx.restore();
+      }
+      for (const side of [-1, 1]) {
+        ctx.save(); ctx.translate(cx + side * open * W * 0.06, cy + open * H * 0.04); ctx.rotate(side * open * 0.35); ctx.scale(side * s, s);
+        const g = ctx.createLinearGradient(0, -60, 0, 60); g.addColorStop(0, "#f4cd86"); g.addColorStop(0.6, "#e9b464"); g.addColorStop(1, "#b97a2f");
+        ctx.fillStyle = g; ctx.strokeStyle = "#b97a2f"; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(0, -60); ctx.bezierCurveTo(60, -70, 120, -30, 122, 30); ctx.bezierCurveTo(123, 65, 80, 78, 40, 60); ctx.bezierCurveTo(20, 50, 4, 30, 0, 10); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.restore();
+      }
+    };
+  }
+
+  const kinds = { sand, birds, life, text, golf, delve, cycles, hex, lantern, debris: debrisPv, reversi: reversiPv, tall: tallPv, ember: emberPv, sol: solPv, typefall: typePv, crates: cratesPv, pipes: pipesPv, cat: catPv, units: unitsPv, cookie: cookiePv };
   const live = [];
   document.querySelectorAll("canvas[data-preview]").forEach(c => {
     fit(c);
@@ -598,6 +870,28 @@
   addEventListener("resize", () => live.forEach(e => { fit(e.c); e.draw(); }));
   const io = new IntersectionObserver(es => es.forEach(x => { const e = live.find(l => l.c === x.target); if (e) e.visible = x.isIntersecting; }));
   live.forEach(e => io.observe(e.c));
+  // "Surprise me" picks any toy at random
+  document.getElementById("surprise").addEventListener("click", () => {
+    const links = [...document.querySelectorAll("a.toy")];
+    location.href = links[Math.random() * links.length | 0].getAttribute("href");
+  });
+  // the secret: the Konami code throws a party
+  const code = ["ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", "ArrowLeft", "ArrowRight", "ArrowLeft", "ArrowRight", "b", "a"];
+  let pos = 0;
+  addEventListener("keydown", e => {
+    pos = e.key === code[pos] || e.key.toLowerCase() === code[pos] ? pos + 1 : (e.key === code[0] ? 1 : 0);
+    if (pos < code.length) return;
+    pos = 0;
+    document.body.classList.toggle("party");
+    document.querySelector(".secret").textContent = document.body.classList.contains("party") ? "You found it. Enter the code again to calm things down." : "There's also a secret on this page.";
+    if (!document.body.classList.contains("party")) return;
+    const bits = ["🍌", "🔥", "🃏", "🐈", "🦒", "🍪", "💾", "🫖", "🦆", "⭐"];
+    for (let i = 0; i < 60; i++) {
+      const el = document.createElement("span"); el.className = "confetti"; el.textContent = bits[i % bits.length];
+      el.style.left = Math.random() * 100 + "vw"; el.style.animationDuration = 2 + Math.random() * 3 + "s"; el.style.animationDelay = Math.random() * 0.8 + "s";
+      document.body.appendChild(el); setTimeout(() => el.remove(), 6000);
+    }
+  });
   if (!reduce) (function loop() { live.forEach(e => e.visible && e.draw()); requestAnimationFrame(loop); })();
 })();
 </script>

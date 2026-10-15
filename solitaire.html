@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Solitaire</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Caslon+Text:wght@400;700&family=Instrument+Sans:wght@400;600&display=swap">
+<style>
+  /* Layout: a card table — toolbar strip, then stock/waste/foundations row, then seven tableau columns. */
+  :root {
+    --table: #1f2a3d;
+    --table-hi: #2a3852;
+    --card: #fbf6ea;
+    --edge: #d9cfb8;
+    --ink: #1d1b19;
+    --red: #b3261e;
+    --ui: #e9edf5;
+    --muted: #9aa6bd;
+    --gold: #e9c46a;
+    --serif: "Libre Caslon Text", "Baskerville", Georgia, serif;
+    --sans: "Instrument Sans", system-ui, sans-serif;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; min-height: 100%; }
+  body { background: radial-gradient(ellipse at 50% 20%, var(--table-hi), var(--table) 70%) fixed, var(--table); color: var(--ui); font: 400 14px/1.4 var(--sans); padding-inline: 16px; padding-block: 12px 24px; user-select: none; -webkit-user-select: none; }
+  .bar { max-width: 860px; margin: 0 auto 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+  .bar h1 { margin: 0; font: 700 22px/1 var(--serif); letter-spacing: 0.01em; }
+  .stat { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .stat b { color: var(--ui); font-weight: 600; }
+  .bar .sp { flex: 1; }
+  .btn { font: 600 13px var(--sans); color: var(--ui); background: transparent; border: 1px solid #ffffff2e; border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+  .btn:hover:not(:disabled) { border-color: #ffffff66; }
+  .btn:disabled { opacity: 0.35; cursor: default; }
+  .btn.gold { border-color: var(--gold); color: var(--gold); }
+  .bar a { color: var(--muted); text-decoration: none; }
+  .bar a:hover { color: var(--ui); }
+  :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  #table { position: relative; max-width: 860px; margin: 0 auto; touch-action: none; }
+  .slot { position: absolute; border: 1.5px dashed #ffffff26; border-radius: 7px; }
+  .slot.found::after { content: attr(data-s); position: absolute; inset: 0; display: grid; place-items: center; font: 400 calc(var(--cw) * 0.45) var(--serif); color: #ffffff1f; }
+  .slot.stock { cursor: pointer; border-style: solid; }
+  .slot.stock::after { content: "↻"; position: absolute; inset: 0; display: grid; place-items: center; font-size: calc(var(--cw) * 0.4); color: #ffffff40; }
+  .card {
+    position: absolute; left: 0; top: 0; border-radius: 7px; cursor: pointer; will-change: transform;
+    transition: transform 0.22s cubic-bezier(.2,.8,.3,1);
+  }
+  .card.drag { transition: none; }
+  .card .f, .card .b { position: absolute; inset: 0; border-radius: 7px; }
+  .card .f { background: var(--card); border: 1px solid var(--edge); box-shadow: 0 1px 2px #00000040; color: var(--ink); overflow: hidden; }
+  .card.red .f { color: var(--red); }
+  .card .b { background: #7a2e3a; border: 3px solid var(--card); box-shadow: 0 1px 2px #00000040;
+    background-image: repeating-linear-gradient(45deg, #ffffff18 0 2px, transparent 2px 7px), repeating-linear-gradient(-45deg, #ffffff18 0 2px, transparent 2px 7px); }
+  .card.up .b, .card:not(.up) .f { display: none; }
+  .corner { position: absolute; left: 7%; top: 3%; display: grid; justify-items: center; line-height: 0.95; font: 700 calc(var(--cw) * 0.24) var(--serif); }
+  .corner i { font-style: normal; font-size: 0.85em; }
+  .corner.br { left: auto; top: auto; right: 7%; bottom: 3%; transform: rotate(180deg); }
+  .pip { position: absolute; inset: 0; display: grid; place-items: center; font: 400 calc(var(--cw) * 0.5) var(--serif); }
+  .pip.face { font-weight: 700; font-size: calc(var(--cw) * 0.44); }
+  .pip.face span { display: grid; justify-items: center; line-height: 1; gap: 2px; }
+  .pip.face small { font-size: 0.6em; font-weight: 400; }
+  .card.hint .f { box-shadow: 0 0 0 3px var(--gold); }
+  .card.shake { animation: shake 0.3s; }
+  @keyframes shake { 25% { margin-left: -5px; } 75% { margin-left: 5px; } }
+  #fx { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: auto; cursor: pointer; z-index: 1500; }
+  .winmsg { z-index: 1600; position: fixed; left: 50%; top: 18%; transform: translateX(-50%); text-align: center; pointer-events: none; display: grid; gap: 6px; width: calc(100% - 32px); }
+  .winmsg h2 { margin: 0; font: 700 clamp(30px, 7vw, 54px)/1 var(--serif); color: var(--gold); text-shadow: 0 2px 16px #00000088; }
+  .winmsg p { margin: 0; color: var(--ui); text-shadow: 0 1px 6px #000; }
+  @media (prefers-reduced-motion: reduce) { .card { transition: none; } }
+</style>
+</head>
+<body>
+<div class="bar">
+  <h1>Solitaire</h1>
+  <span class="stat">moves <b id="moves">0</b></span>
+  <span class="stat">time <b id="time">0:00</b></span>
+  <span class="sp"></span>
+  <button class="btn" id="draw" type="button" aria-label="Toggle draw one or draw three">draw 1</button>
+  <button class="btn" id="hint" type="button">hint</button>
+  <button class="btn" id="undo" type="button">undo</button>
+  <button class="btn gold" id="auto" type="button" hidden>finish</button>
+  <button class="btn" id="new" type="button">new deal</button>
+  <a href="index.html">&larr; playpen</a>
+</div>
+<div id="table" aria-label="Klondike solitaire table. Drag cards, or tap a card to send it to the best place."></div>
+<canvas id="fx" hidden></canvas>
+<div class="winmsg" id="winmsg" hidden><h2>You won</h2><p id="winp"></p></div>
+<script>
+(() => {
+  const SUITS = ["♠", "♥", "♦", "♣"], RANKS = ["", "A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
+  const red = s => s === 1 || s === 2;
+  const $ = id => document.getElementById(id);
+  const table = $("table");
+  let cards = [], S, history = [], moves = 0, t0 = 0, timer = null, drawN = 1, started = false, won = false, cw = 80, ch = 112, gap = 10;
+  try { drawN = +(localStorage.getItem("sol-draw") || 1); } catch {}
+
+  // ----- deck + elements -----
+  for (let i = 0; i < 52; i++) {
+    const c = { id: i, s: i % 4, r: Math.floor(i / 4) + 1, up: false };
+    const el = document.createElement("div");
+    el.className = "card" + (red(c.s) ? " red" : "");
+    const face = c.r > 10 ? `<div class="pip face"><span>${RANKS[c.r]}<small>${SUITS[c.s]}</small></span></div>` : `<div class="pip">${SUITS[c.s]}</div>`;
+    el.innerHTML = `<div class="f"><div class="corner">${RANKS[c.r]}<i>${SUITS[c.s]}</i></div>${face}<div class="corner br">${RANKS[c.r]}<i>${SUITS[c.s]}</i></div></div><div class="b"></div>`;
+    el.dataset.id = i; c.el = el; cards.push(c);
+  }
+  const slots = {};
+  for (const k of ["stock", "waste", "f0", "f1", "f2", "f3", "t0", "t1", "t2", "t3", "t4", "t5", "t6"]) {
+    const d = document.createElement("div"); d.className = "slot" + (k === "stock" ? " stock" : k[0] === "f" ? " found" : "");
+    if (k[0] === "f") d.dataset.s = SUITS[+k[1]];
+    table.appendChild(d); slots[k] = d;
+  }
+  cards.forEach(c => table.appendChild(c.el));
+  slots.stock.addEventListener("click", clickStock);
+
+  // ----- state -----
+  const snapshot = () => JSON.stringify({ S, up: cards.map(c => c.up), moves });
+  function restore(js) { const o = JSON.parse(js); S = o.S; o.up.forEach((u, i) => cards[i].up = u); moves = o.moves; }
+  function deal() {
+    const ids = [...Array(52).keys()];
+    for (let i = 51; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [ids[i], ids[j]] = [ids[j], ids[i]]; }
+    cards.forEach(c => c.up = false);
+    S = { stock: [], waste: [], f0: [], f1: [], f2: [], f3: [], t0: [], t1: [], t2: [], t3: [], t4: [], t5: [], t6: [] };
+    let k = 0;
+    for (let col = 0; col < 7; col++) for (let n = 0; n <= col; n++) { const id = ids[k++]; S["t" + col].push(id); if (n === col) cards[id].up = true; }
+    while (k < 52) S.stock.push(ids[k++]);
+    history = []; moves = 0; won = false; started = false; clearInterval(timer); $("time").textContent = "0:00";
+    $("fx").hidden = true; $("winmsg").hidden = true;
+    layout();
+  }
+  const top = p => S[p][S[p].length - 1];
+  function record() { history.push(snapshot()); if (history.length > 300) history.shift(); if (!started) { started = true; t0 = Date.now(); timer = setInterval(tick, 500); } }
+  function tick() { const s = Math.floor((Date.now() - t0) / 1000); $("time").textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
+
+  // ----- rules -----
+  function canDrop(ids, pile) {
+    const c = cards[ids[0]];
+    if (pile[0] === "f") {
+      if (ids.length !== 1) return false;
+      const t = top(pile);
+      return t == null ? c.r === 1 : cards[t].s === c.s && c.r === cards[t].r + 1;
+    }
+    if (pile[0] === "t") {
+      const t = top(pile);
+      if (t == null) return c.r === 13;
+      const tc = cards[t];
+      return tc.up && red(tc.s) !== red(c.s) && c.r === tc.r - 1;
+    }
+    return false;
+  }
+  function where(id) { for (const p in S) { const i = S[p].indexOf(id); if (i >= 0) return [p, i]; } }
+  function movable(id) {
+    const [p, i] = where(id), c = cards[id];
+    if (!c.up) return null;
+    if (p === "waste" || p[0] === "f") return i === S[p].length - 1 ? [p, [id]] : null;
+    if (p[0] === "t") return [p, S[p].slice(i)];
+    return null;
+  }
+  function move(from, ids, to) {
+    record();
+    S[from].splice(S[from].length - ids.length, ids.length);
+    S[to].push(...ids);
+    if (from[0] === "t" && S[from].length && !cards[top(from)].up) cards[top(from)].up = true;
+    moves++; after();
+  }
+  function clickStock() {
+    if (won) return;
+    if (!S.stock.length && !S.waste.length) return;
+    record();
+    if (S.stock.length) { for (let k = 0; k < drawN && S.stock.length; k++) { const id = S.stock.pop(); cards[id].up = true; S.waste.push(id); } }
+    else { while (S.waste.length) { const id = S.waste.pop(); cards[id].up = false; S.stock.push(id); } }
+    moves++; after();
+  }
+  function bestTarget(from, ids) {
+    const order = [];
+    if (ids.length === 1 && from[0] !== "f") order.push("f0", "f1", "f2", "f3");
+    const tabs = ["t0", "t1", "t2", "t3", "t4", "t5", "t6"].filter(p => p !== from);
+    // prefer real columns over empty ones, and don't shuffle a king between empty columns
+    order.push(...tabs.filter(p => S[p].length), ...tabs.filter(p => !S[p].length && !(from[0] === "t" && S[from].indexOf(ids[0]) === 0)));
+    return order.find(p => canDrop(ids, p));
+  }
+  function after() {
+    layout();
+    $("moves").textContent = moves;
+    $("undo").disabled = !history.length;
+    const done = ["f0", "f1", "f2", "f3"].every(f => S[f].length === 13);
+    const canAuto = !S.stock.length && !S.waste.length && cards.every(c => c.up || S.f0.includes(c.id) || S.f1.includes(c.id) || S.f2.includes(c.id) || S.f3.includes(c.id));
+    $("auto").hidden = !canAuto || done;
+    if (done && !won) win();
+  }
+
+  // ----- layout -----
+  function pos() {
+    const w = table.clientWidth;
+    cw = Math.min(100, (w - gap * 6) / 7); ch = cw * 1.4; gap = Math.max(5, Math.min(12, w * 0.012));
+    table.style.setProperty("--cw", cw + "px");
+    const col = i => i * (cw + gap);
+    const P = { stock: [col(0), 0], waste: [col(1), 0], f0: [col(3), 0], f1: [col(4), 0], f2: [col(5), 0], f3: [col(6), 0] };
+    for (let i = 0; i < 7; i++) P["t" + i] = [col(i), ch + gap * 2];
+    return P;
+  }
+  let P;
+  function layout(drag) {
+    P = pos();
+    for (const k in slots) { const [x, y] = P[k]; Object.assign(slots[k].style, { left: x + "px", top: y + "px", width: cw + "px", height: ch + "px" }); }
+    let maxBottom = ch * 2 + gap * 2;
+    const avail = Math.max(ch * 3, innerHeight - table.getBoundingClientRect().top - ch - 40 + scrollY);
+    for (const p in S) {
+      const pile = S[p];
+      // squeeze the fan when a column gets long so it still fits on screen
+      let down = 0.11, up = 0.27;
+      if (p[0] === "t") {
+        const need = pile.reduce((a, id, i) => i === pile.length - 1 ? a : a + (cards[id].up ? up : down), 0) * ch;
+        const room = avail - (ch + gap * 2);
+        if (need > room) { const k = room / need; down *= k; up *= k; }
+      }
+      let y = P[p][1], x = P[p][0];
+      pile.forEach((id, i) => {
+        const c = cards[id];
+        let cx = x, cy = y;
+        if (p === "waste") { const shown = drawN === 3 ? Math.min(3, pile.length) : 1, k = i - (pile.length - shown); if (k > 0) cx = x + k * cw * 0.22; }
+        if (!drag || !drag.ids.includes(id)) { c.el.style.transform = `translate(${cx}px, ${cy}px)`; }
+        c.el.style.zIndex = (p[0] === "t" ? 100 : p === "waste" ? 50 : 10) + i;
+        c.el.style.width = cw + "px"; c.el.style.height = ch + "px";
+        c.el.classList.toggle("up", c.up);
+        c.x = cx; c.y = cy;
+        if (p[0] === "t") { y += (c.up ? up : down) * ch; maxBottom = Math.max(maxBottom, cy + ch); }
+      });
+    }
+    table.style.height = maxBottom + gap + "px";
+  }
+  addEventListener("resize", () => layout());
+
+  // ----- pointer: drag, or tap to auto-move -----
+  let drag = null;
+  table.addEventListener("pointerdown", e => {
+    const el = e.target.closest(".card"); if (!el || won) return;
+    const id = +el.dataset.id, [p] = where(id);
+    if (p === "stock") { clickStock(); return; }
+    const m = movable(id); if (!m) return;
+    drag = { from: m[0], ids: m[1], sx: e.clientX, sy: e.clientY, moved: false, pid: e.pointerId };
+    table.setPointerCapture(e.pointerId);
+  });
+  table.addEventListener("pointermove", e => {
+    if (!drag) return;
+    const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+    if (!drag.moved && Math.hypot(dx, dy) < 6) return;
+    drag.moved = true;
+    drag.ids.forEach((id, i) => { const c = cards[id]; c.el.classList.add("drag"); c.el.style.zIndex = 1000 + i; c.el.style.transform = `translate(${c.x + dx}px, ${c.y + dy}px) rotate(${Math.max(-4, Math.min(4, dx * 0.02))}deg)`; });
+  });
+  table.addEventListener("pointerup", e => {
+    if (!drag) return;
+    const d = drag; drag = null;
+    d.ids.forEach(id => cards[id].el.classList.remove("drag"));
+    if (!d.moved) { // tap
+      const to = bestTarget(d.from, d.ids);
+      if (to) move(d.from, d.ids, to); else { const el = cards[d.ids[0]].el; el.classList.remove("shake"); void el.offsetWidth; el.classList.add("shake"); }
+      return;
+    }
+    // drop onto whichever pile the dragged card's centre is over
+    const c = cards[d.ids[0]], dx = e.clientX - d.sx, dy = e.clientY - d.sy, cx = c.x + dx + cw / 2, cy = c.y + dy + ch / 2;
+    let best = null, bd = Infinity;
+    for (const p of ["f0", "f1", "f2", "f3", "t0", "t1", "t2", "t3", "t4", "t5", "t6"]) {
+      if (p === d.from) continue;
+      const t = top(p), tx = (t != null ? cards[t].x : P[p][0]) + cw / 2, ty = (t != null ? cards[t].y : P[p][1]) + ch / 2;
+      const dist = Math.hypot(cx - tx, cy - ty);
+      if (dist < cw * 1.1 && dist < bd && canDrop(d.ids, p)) { bd = dist; best = p; }
+    }
+    if (best) move(d.from, d.ids, best); else layout();
+  });
+  table.addEventListener("dblclick", e => e.preventDefault());
+
+  // ----- buttons -----
+  $("new").addEventListener("click", deal);
+  $("undo").addEventListener("click", () => { if (!history.length || won) return; restore(history.pop()); after(); });
+  $("draw").textContent = "draw " + drawN;
+  $("draw").addEventListener("click", () => { drawN = drawN === 1 ? 3 : 1; $("draw").textContent = "draw " + drawN; try { localStorage.setItem("sol-draw", drawN); } catch {} deal(); });
+  $("hint").addEventListener("click", () => {
+    const tryIds = [];
+    if (S.waste.length) tryIds.push(top("waste"));
+    for (let i = 0; i < 7; i++) { const p = S["t" + i], k = p.findIndex(id => cards[id].up); if (k >= 0) { tryIds.push(p[k]); tryIds.push(p[p.length - 1]); } }
+    for (const id of tryIds) {
+      const m = movable(id); if (!m) continue;
+      const to = bestTarget(m[0], m[1]);
+      // skip pointless shuffles of a whole column onto another
+      if (to && !(to[0] === "t" && m[0][0] === "t" && S[m[0]].indexOf(m[1][0]) === 0 && !S[to].length)) {
+        m[1].forEach(i => cards[i].el.classList.add("hint"));
+        setTimeout(() => m[1].forEach(i => cards[i].el.classList.remove("hint")), 900);
+        return;
+      }
+    }
+    slots.stock.animate([{ boxShadow: "0 0 0 3px #e9c46a" }, { boxShadow: "0 0 0 0 #e9c46a00" }], 900);
+  });
+  $("auto").addEventListener("click", function finish() {
+    for (const p of ["t0", "t1", "t2", "t3", "t4", "t5", "t6"]) {
+      const id = top(p); if (id == null) continue;
+      const f = ["f0", "f1", "f2", "f3"].find(f => canDrop([id], f));
+      if (f) { move(p, [id], f); setTimeout(finish, 70); return; }
+    }
+  });
+  addEventListener("keydown", e => { if ((e.ctrlKey || e.metaKey) && e.key === "z") { e.preventDefault(); $("undo").click(); } });
+
+  // ----- the bouncing-cards finale -----
+  function win() {
+    won = true; clearInterval(timer);
+    const secs = Math.floor((Date.now() - t0) / 1000);
+    let best = null; try { best = +localStorage.getItem("sol-best-" + drawN) || null; } catch {}
+    const isBest = best == null || secs < best;
+    if (isBest) try { localStorage.setItem("sol-best-" + drawN, secs); } catch {}
+    $("winp").textContent = `${moves} moves in ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}${isBest ? ", your fastest draw-" + drawN + " win" : ""}. Tap to deal again.`;
+    $("winmsg").hidden = false;
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) { $("fx").hidden = false; return; }
+    const fx = $("fx"), dpr = Math.min(2, devicePixelRatio || 1); fx.hidden = false;
+    fx.width = innerWidth * dpr; fx.height = innerHeight * dpr;
+    const g = fx.getContext("2d"); g.scale(dpr, dpr);
+    const rect = table.getBoundingClientRect();
+    const queue = [];
+    for (let r = 13; r >= 1; r--) for (let f = 0; f < 4; f++) queue.push({ id: S["f" + f][r - 1], f });
+    let active = null, frame = 0;
+    (function loop() {
+      if (fx.hidden) return;
+      if (!active || active.x < -cw || active.x > innerWidth + cw) {
+        const n = queue.shift(); if (!n) return;
+        const c = cards[n.id];
+        active = { c, x: rect.left + P["f" + n.f][0], y: rect.top + P["f" + n.f][1], vx: (Math.random() < 0.5 ? -1 : 1) * (2 + Math.random() * 4), vy: -Math.random() * 6 };
+        c.el.style.visibility = "hidden";
+      }
+      for (let k = 0; k < 2; k++) {
+        active.vy += 0.5; active.x += active.vx; active.y += active.vy;
+        if (active.y + ch > innerHeight) { active.y = innerHeight - ch; active.vy *= -0.75; }
+        drawCard(g, active.c, active.x, active.y);
+      }
+      frame++; requestAnimationFrame(loop);
+    })();
+  }
+  function drawCard(g, c, x, y) {
+    g.fillStyle = "#fbf6ea"; g.strokeStyle = "#d9cfb8"; g.lineWidth = 1;
+    g.beginPath(); g.roundRect ? g.roundRect(x, y, cw, ch, 7) : g.rect(x, y, cw, ch); g.fill(); g.stroke();
+    g.fillStyle = red(c.s) ? "#b3261e" : "#1d1b19";
+    g.font = `700 ${cw * 0.24}px "Libre Caslon Text", Georgia, serif`; g.textAlign = "left"; g.textBaseline = "top";
+    g.fillText(RANKS[c.r], x + cw * 0.08, y + ch * 0.04);
+    g.font = `400 ${cw * 0.5}px Georgia, serif`; g.textAlign = "center"; g.textBaseline = "middle";
+    g.fillText(SUITS[c.s], x + cw / 2, y + ch / 2);
+  }
+  $("fx").addEventListener("click", () => { cards.forEach(c => c.el.style.visibility = ""); deal(); });
+
+  deal();
+  window.__sol = { get S() { return S; }, cards, move, clickStock, canDrop, movable, bestTarget, win, top };
+})();
+</script>
+</body>
+</html>

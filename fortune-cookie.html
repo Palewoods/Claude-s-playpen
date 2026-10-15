@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fortune Cookie</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Courier+Prime:wght@400;700&display=swap">
+<style>
+  /* Layout: a single cookie centre stage; when cracked, the paper slip slides out beneath it. */
+  :root {
+    --bg: #e3efe8;
+    --ink: #22302a;
+    --muted: #5d6f66;
+    --cookie: #e9b464;
+    --cookie-dk: #b97a2f;
+    --slip: #fffdf6;
+    --red: #c2412d;
+    --display: "DM Serif Display", Georgia, serif;
+    --type: "Courier Prime", "Courier New", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #142019; --ink: #e6efe9; --muted: #95a89e; --slip: #f6f1e2; color-scheme: dark; }
+  }
+  :root[data-theme="dark"] { --bg: #142019; --ink: #e6efe9; --muted: #95a89e; --slip: #f6f1e2; color-scheme: dark; }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 400 16px/1.5 var(--type); padding-inline: 16px; padding-block: 24px 40px; min-height: 100vh; }
+  .wrap { max-width: 640px; margin: 0 auto; display: grid; gap: 18px; justify-items: center; text-align: center; }
+  header { width: 100%; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  h1 { margin: 0; font: 400 clamp(30px, 7vw, 46px)/1 var(--display); }
+  h1 i { color: var(--red); }
+  header a { color: var(--muted); text-decoration: none; font-size: 14px; }
+  header a:hover { color: var(--ink); }
+  .lede { margin: 0; color: var(--muted); max-width: 44ch; }
+  #cookie { background: none; border: 0; padding: 0; cursor: pointer; width: min(320px, 80vw); aspect-ratio: 1.5; position: relative; }
+  #cookie:focus-visible { outline: 3px solid var(--red); outline-offset: 6px; border-radius: 20px; }
+  #cookie svg { width: 100%; height: 100%; overflow: visible; }
+  .half { transition: transform 0.6s cubic-bezier(.3,1.4,.5,1); transform-box: fill-box; }
+  .cracked .left { transform: translate(-28px, 10px) rotate(-22deg); transform-origin: right bottom; }
+  .cracked .right { transform: translate(28px, 10px) rotate(22deg); transform-origin: left bottom; }
+  #cookie:not(.cracked):hover svg { animation: wobble 0.5s; }
+  @keyframes wobble { 30% { transform: rotate(-3deg); } 70% { transform: rotate(3deg); } }
+  .crumbs { position: absolute; inset: 0; pointer-events: none; }
+  .crumbs i { position: absolute; left: 50%; top: 55%; width: 6px; height: 5px; background: var(--cookie); border-radius: 2px; animation: crumb 0.8s ease-out forwards; }
+  @keyframes crumb { to { transform: translate(var(--dx), var(--dy)) rotate(200deg); opacity: 0; } }
+  .slip {
+    background: var(--slip); color: #2a2620; width: min(520px, 100%); padding: 18px 22px; box-shadow: 0 8px 20px -10px #00000066;
+    display: grid; gap: 12px; transform-origin: top center; animation: unroll 0.55s cubic-bezier(.2,.9,.3,1.2);
+    border-top: 2px dashed #c2412d55; border-bottom: 2px dashed #c2412d55;
+  }
+  @keyframes unroll { from { transform: scaleY(0.05) translateY(-40px); opacity: 0; } }
+  .slip .f { font: 700 clamp(17px, 3.6vw, 21px)/1.45 var(--type); text-wrap: balance; }
+  .slip .meta { display: flex; flex-wrap: wrap; gap: 6px 18px; justify-content: center; font-size: 14px; color: #6b6458; }
+  .slip .meta b { color: #c2412d; letter-spacing: 0.08em; }
+  .slip .word { font-size: 14px; color: #4a453c; border-top: 1px solid #00000014; padding-top: 10px; }
+  .slip .word em { font: italic 400 20px var(--display); color: #2a2620; }
+  .acts { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  .btn { font: 700 14px var(--type); color: var(--ink); background: transparent; border: 2px solid var(--ink); border-radius: 999px; padding: 7px 16px; cursor: pointer; }
+  .btn.red { background: var(--red); border-color: var(--red); color: #fff; }
+  :focus-visible { outline: 3px solid var(--red); outline-offset: 2px; }
+  .count { color: var(--muted); font-size: 13px; margin: 0; }
+  @media (prefers-reduced-motion: reduce) { .half, .slip, .crumbs i { transition: none; animation: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>Fortune <i>Cookie</i></h1><a href="index.html">&larr; playpen</a></header>
+  <p class="lede" id="lede">Tap the cookie to crack it open.</p>
+  <button id="cookie" type="button" aria-label="Crack the fortune cookie">
+    <svg viewBox="0 0 300 200" aria-hidden="true">
+      <defs>
+        <linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4cd86"/><stop offset="0.6" stop-color="#e9b464"/><stop offset="1" stop-color="#b97a2f"/></linearGradient>
+      </defs>
+      <ellipse cx="150" cy="182" rx="110" ry="10" fill="#00000022"/>
+      <g class="half left">
+        <path d="M150 40 C 90 30, 30 70, 28 130 C 27 165, 70 178, 110 160 C 130 150, 146 130, 150 110 Z" fill="url(#g)" stroke="#b97a2f" stroke-width="3"/>
+        <path d="M60 120 C 80 95, 110 85, 140 90" fill="none" stroke="#ffffff55" stroke-width="4" stroke-linecap="round"/>
+      </g>
+      <g class="half right">
+        <path d="M150 40 C 210 30, 270 70, 272 130 C 273 165, 230 178, 190 160 C 170 150, 154 130, 150 110 Z" fill="url(#g)" stroke="#b97a2f" stroke-width="3"/>
+        <path d="M240 120 C 220 95, 190 85, 160 90" fill="none" stroke="#00000018" stroke-width="4" stroke-linecap="round"/>
+      </g>
+      <path d="M150 42 L150 108" stroke="#b97a2f" stroke-width="3" stroke-linecap="round"/>
+    </svg>
+    <span class="crumbs" id="crumbs"></span>
+  </button>
+  <div class="slip" id="slip" hidden>
+    <div class="f" id="fortune"></div>
+    <div class="meta"><span>lucky numbers <b id="nums"></b></span></div>
+    <div class="word" id="word"></div>
+  </div>
+  <div class="acts" id="acts" hidden>
+    <button class="btn red" id="again" type="button">another cookie</button>
+    <button class="btn" id="copy" type="button">copy fortune</button>
+  </div>
+  <p class="count" id="count"></p>
+</div>
+<script>
+(() => {
+  const HAND = [
+    "A pleasant surprise is waiting for you in an old pull request.",
+    "You will soon refactor something that did not need refactoring.",
+    "The bug is in the last place you look. That is how looking works.",
+    "Someone is thinking of you. It is your future self, and they have notes.",
+    "Your houseplants believe in you. Water them anyway.",
+    "A cat will judge you this week. You will deserve it.",
+    "The answer you seek is in the documentation. Nobody will believe you.",
+    "Today is a good day to close some browser tabs. Not all of them. Let's not be hasty.",
+    "You will find money in a coat pocket. It will be 40 cents and a receipt.",
+    "An unexpected snack is in your near future.",
+    "You are one good night's sleep away from a great idea.",
+    "The meeting could have been an email. You will survive it anyway.",
+    "Fortune favours the bold, and also people who back up their files.",
+    "A small kindness you did last month is still echoing.",
+    "Do not trust the fortune in the next cookie. Trust this one.",
+    "You will be hungry again in one hour.",
+    "Help! I am being held prisoner in a fortune cookie playpen.",
+    "Your code will compile on the first try. Be suspicious.",
+    "The stars align in your favour, but they are very far away.",
+    "Somewhere, a dog is very happy to see someone. Let that be enough today.",
+    "You will receive a compliment about something you almost didn't wear.",
+    "Good things come to those who wait, but better things come to those who reply to the email.",
+    "It is never too late to learn the accordion. It might be too late for your neighbours.",
+    "You already know the answer. You are just hoping for a different one.",
+    "A journey of a thousand miles begins with finding your keys.",
+    "Every great tower began as one block, carefully placed. Sometimes it sliced off a bit.",
+    "The lantern stays lit as long as somebody tends it.",
+    "There is a semicolon out there that misses you.",
+    "Your next idea will be weird. Make it anyway.",
+    "Patience is a virtue. So is a good snack drawer.",
+  ];
+  const T = {
+    when: ["Soon", "This week", "Before the next full moon", "On a Tuesday", "When you least expect it", "After lunch", "Within three sleeps"],
+    who: ["a stranger", "an old friend", "a pigeon", "your past self", "a very polite dog", "someone in a yellow coat", "a librarian", "a small child with big opinions"],
+    act: ["will hand you", "will remind you of", "will ask you about", "will accidentally give you", "will save you from", "will teach you"],
+    what: ["a song you forgot you loved", "a better way to fold a fitted sheet", "the courage to ask", "a perfectly ripe avocado", "a story worth retelling", "an excellent shortcut", "a second chance", "exactly the right word"],
+  };
+  const WORDS = [
+    ["petrichor", "noun", "the pleasant earthy smell after rain falls on dry ground"],
+    ["apricity", "noun", "the warmth of the sun on a cold winter's day"],
+    ["susurrus", "noun", "a soft whispering or rustling sound"],
+    ["crepuscular", "adjective", "relating to twilight; active at dawn and dusk, like cats and rabbits"],
+    ["defenestration", "noun", "the act of throwing someone or something out of a window"],
+    ["borborygmus", "noun", "a rumbling noise made by gas moving through the intestines"],
+    ["sesquipedalian", "adjective", "given to using long words, such as sesquipedalian"],
+    ["lollygag", "verb", "to spend time aimlessly; to dawdle"],
+    ["cattywampus", "adjective", "askew or out of alignment, mostly in American English"],
+    ["flibbertigibbet", "noun", "a frivolous, flighty, or excessively talkative person"],
+    ["mellifluous", "adjective", "sweet or musical; pleasant to hear"],
+    ["ultracrepidarian", "adjective", "expressing opinions on matters beyond one's knowledge"],
+    ["vellichor", "noun", "a coined word for the wistfulness of used bookshops"],
+    ["hiraeth", "noun", "a Welsh word for a homesickness for a place you can't return to"],
+    ["quidnunc", "noun", "a person who is eager to know the latest news and gossip"],
+    ["gongoozler", "noun", "a person who enjoys watching activity on canals"],
+    ["snollygoster", "noun", "a shrewd, unprincipled person, especially a politician"],
+    ["kerfuffle", "noun", "a commotion or fuss, especially one caused by conflicting views"],
+    ["bumbershoot", "noun", "an old American slang word for an umbrella"],
+    ["collywobbles", "noun", "stomach pain or queasiness, often from nerves"],
+  ];
+  const $ = id => document.getElementById(id);
+  const pick = a => a[Math.random() * a.length | 0];
+  let cracked = false, count = 0;
+  try { count = +localStorage.getItem("cookies") || 0; } catch {}
+  const showCount = () => $("count").textContent = count ? `${count} ${count === 1 ? "cookie" : "cookies"} cracked on this device.` : "";
+  showCount();
+
+  function fortune() {
+    if (Math.random() < 0.55) return pick(HAND);
+    return `${pick(T.when)}, ${pick(T.who)} ${pick(T.act)} ${pick(T.what)}.`;
+  }
+  function crack() {
+    if (cracked) return;
+    cracked = true; $("cookie").classList.add("cracked"); $("cookie").setAttribute("aria-label", "Cracked cookie");
+    const cr = $("crumbs"); cr.innerHTML = "";
+    for (let i = 0; i < 14; i++) { const c = document.createElement("i"); c.style.setProperty("--dx", (Math.random() - 0.5) * 220 + "px"); c.style.setProperty("--dy", (Math.random() * 90 + 20) + "px"); cr.appendChild(c); }
+    const nums = new Set(); while (nums.size < 6) nums.add(1 + (Math.random() * 49 | 0));
+    const [w, pos, def] = pick(WORDS);
+    $("fortune").textContent = fortune();
+    $("nums").textContent = [...nums].sort((a, b) => a - b).join(" ");
+    $("word").innerHTML = `word of the cookie: <em>${w}</em> <span>(${pos})</span>: ${def}.`;
+    setTimeout(() => { $("slip").hidden = false; $("acts").hidden = false; $("lede").textContent = "Your fortune:"; $("again").focus(); }, 350);
+    count++; try { localStorage.setItem("cookies", count); } catch {} showCount();
+  }
+  function reset() {
+    cracked = false; $("cookie").classList.remove("cracked"); $("cookie").setAttribute("aria-label", "Crack the fortune cookie");
+    $("slip").hidden = true; $("acts").hidden = true; $("lede").textContent = "A fresh cookie. Tap it to crack it open."; $("cookie").focus();
+  }
+  $("cookie").addEventListener("click", () => cracked ? reset() : crack());
+  $("again").addEventListener("click", reset);
+  $("copy").addEventListener("click", () => {
+    const text = `${$("fortune").textContent} Lucky numbers: ${$("nums").textContent}`;
+    navigator.clipboard?.writeText(text).then(() => { $("copy").textContent = "copied"; setTimeout(() => $("copy").textContent = "copy fortune", 1400); })
+      .catch(() => { const r = document.createRange(); r.selectNodeContents($("fortune")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); $("copy").textContent = "selected, press copy"; });
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Biscuit the Desk Cat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&display=swap">
+<style>
+  /* Layout: a little room drawn on canvas; a handwritten status note and three buttons pinned like a sticky note. */
+  :root {
+    --paper: #fff7c2;
+    --ink: #3b2f22;
+    --muted: #7a6a55;
+    --hand: "Gaegu", "Comic Sans MS", "Chalkboard SE", cursive;
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; }
+  body { background: #e9d8bd; color: var(--ink); font: 400 20px/1.2 var(--hand); overflow: hidden; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  .note {
+    position: fixed; top: calc(14px + env(safe-area-inset-top, 0px)); left: 16px; width: min(270px, calc(100% - 32px));
+    background: var(--paper); padding: 12px 14px 14px; transform: rotate(-1.5deg); box-shadow: 0 6px 14px -6px #00000055; display: grid; gap: 6px;
+  }
+  .note h1 { margin: 0; font: 700 28px/1 var(--hand); }
+  .note p { margin: 0; color: var(--muted); }
+  .mood { display: flex; align-items: center; gap: 8px; }
+  .mood span { flex: 1; height: 10px; border: 2px solid var(--ink); border-radius: 6px; overflow: hidden; }
+  .mood i { display: block; height: 100%; background: #e86f5a; transition: width 0.4s; }
+  .btns { display: flex; flex-wrap: wrap; gap: 6px; }
+  .btns button { font: 700 18px var(--hand); color: var(--ink); background: #ffffff99; border: 2px solid var(--ink); border-radius: 10px; padding: 2px 10px; cursor: pointer; }
+  .btns button:hover { background: #fff; }
+  :focus-visible { outline: 3px solid #e86f5a; outline-offset: 2px; }
+  a.back { position: fixed; top: calc(14px + env(safe-area-inset-top, 0px)); right: 16px; color: var(--ink); font: 700 20px var(--hand); text-decoration: none; background: #ffffffaa; padding: 2px 10px; border-radius: 8px; }
+</style>
+</head>
+<body>
+<canvas id="c" aria-label="A cosy room where Biscuit the cat lives. Move the pointer and Biscuit will follow it. Click the floor to roll a ball of yarn."></canvas>
+<div class="note">
+  <h1>Biscuit</h1>
+  <p id="status">is watching you.</p>
+  <div class="mood">mood <span><i id="mood" style="width:60%"></i></span></div>
+  <div class="btns">
+    <button type="button" id="yarn">roll yarn</button>
+    <button type="button" id="fish">give fish</button>
+    <button type="button" id="nap">lights</button>
+  </div>
+</div>
+<a class="back" href="index.html">&larr; playpen</a>
+<script>
+(() => {
+  const canvas = document.getElementById("c"), ctx = canvas.getContext("2d"), dpr = Math.min(2, devicePixelRatio || 1);
+  const $ = id => document.getElementById(id);
+  let W, H, FLOOR, S;
+  function resize() { W = innerWidth; H = innerHeight; canvas.width = W * dpr; canvas.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); FLOOR = H * 0.8; S = Math.max(0.8, Math.min(1.6, W / 700)); }
+  addEventListener("resize", resize); resize();
+
+  const cat = { x: W * 0.55, vx: 0, face: 1, state: "sit", t: 0, idle: 0, blink: 0, mood: 0.6, purr: 0, eat: 0, lookY: 0 };
+  let pointer = { x: W * 0.55, y: FLOOR, still: 0, inside: false }, yarn = null, fish = null, hearts = [], zs = [], lightsOff = false, crumbs = [];
+  const hour = new Date().getHours(), night = hour < 6 || hour >= 20, dusk = !night && (hour >= 18 || hour < 8);
+
+  const say = s => $("status").textContent = s;
+  canvas.addEventListener("pointermove", e => { pointer.x = e.clientX; pointer.y = e.clientY; pointer.still = 0; pointer.inside = true; });
+  canvas.addEventListener("pointerleave", () => { pointer.inside = false; });
+  canvas.addEventListener("pointerdown", e => {
+    // petting: click on the cat
+    if (Math.abs(e.clientX - cat.x) < 50 * S && e.clientY > FLOOR - 80 * S && e.clientY < FLOOR + 10) { pet(); return; }
+    rollYarn(e.clientX, Math.min(e.clientY, FLOOR - 10));
+  });
+  function rollYarn(x, y) { yarn = { x, y, vx: (Math.random() - 0.5) * 300, vy: 0, rot: 0 }; if (cat.state === "sleep") wake("hears something roll"); }
+  function pet() {
+    cat.purr = 2.5; cat.mood = Math.min(1, cat.mood + 0.08);
+    for (let i = 0; i < 3; i++) hearts.push({ x: cat.x + (Math.random() - 0.5) * 30, y: FLOOR - 70 * S, vy: -40 - Math.random() * 30, life: 1.4 });
+    say(cat.state === "sleep" ? "purrs in their sleep." : "purrs loudly.");
+  }
+  function wake(why) { cat.state = "sit"; cat.idle = 0; say(why); }
+  $("yarn").addEventListener("click", () => rollYarn(Math.random() * W * 0.8 + W * 0.1, FLOOR - 200));
+  $("fish").addEventListener("click", () => { fish = { x: Math.random() * W * 0.7 + W * 0.15, y: FLOOR - 220, vy: 0 }; if (cat.state === "sleep") wake("smells fish. Wide awake now."); });
+  $("nap").addEventListener("click", () => { lightsOff = !lightsOff; $("nap").textContent = lightsOff ? "lights on" : "lights"; if (lightsOff) say("thinks it's bedtime."); else wake("blinks at the light."); });
+
+  function update(dt) {
+    cat.t += dt; cat.blink -= dt; cat.purr = Math.max(0, cat.purr - dt);
+    cat.mood = Math.max(0, cat.mood - dt * 0.004);
+    pointer.still += dt;
+    let target = null;
+    if (fish && fish.y >= FLOOR - 6) target = fish.x;
+    else if (yarn) target = yarn.x;
+    else if (pointer.inside && pointer.y > FLOOR - 160 && pointer.still > 0.4 && Math.abs(pointer.x - cat.x) > 40 * S) target = pointer.x;
+    if (cat.state === "eat") {
+      cat.eat -= dt; if (cat.eat <= 0) { cat.state = "sit"; cat.mood = Math.min(1, cat.mood + 0.3); say("licks their lips. Very content."); }
+      if (Math.random() < dt * 6) crumbs.push({ x: cat.x + cat.face * 40 * S, y: FLOOR - 6, vx: (Math.random() - 0.5) * 60, vy: -60, life: 0.6 });
+    } else if (cat.state === "sleep") {
+      if (Math.random() < dt * 0.9) zs.push({ x: cat.x + cat.face * 20 * S, y: FLOOR - 45 * S, life: 2.2 });
+      if (!lightsOff && cat.idle > 40) wake("wakes up and stretches.");
+    } else if (target != null) {
+      const d = target - cat.x;
+      cat.face = Math.sign(d) || cat.face;
+      const speed = (yarn || fish ? 260 : 150) * S;
+      cat.state = Math.abs(d) > 30 * S ? "walk" : "sit";
+      if (cat.state === "walk") cat.x += Math.sign(d) * Math.min(Math.abs(d), speed * dt);
+      cat.idle = 0;
+      if (yarn && Math.abs(yarn.x - cat.x) < 40 * S && yarn.y > FLOOR - 30) { // bat it
+        yarn.vx = cat.face * (180 + Math.random() * 220); yarn.vy = -150 - Math.random() * 120;
+        cat.mood = Math.min(1, cat.mood + 0.04); say(["bats the yarn!", "pounces!", "is having the best day.", "attacks the yarn with great violence."][Math.random() * 4 | 0]);
+        if (Math.random() < 0.18) { yarn = null; say("got bored of the yarn."); }
+      }
+      if (fish && fish.y >= FLOOR - 6 && Math.abs(fish.x - cat.x) < 34 * S) { fish = null; cat.state = "eat"; cat.eat = 2.2; say("is eating. Do not disturb."); }
+    } else {
+      cat.state = "sit"; cat.idle += dt;
+      if (pointer.inside) { cat.face = Math.sign(pointer.x - cat.x) || cat.face; }
+      if (cat.idle > (lightsOff ? 2 : 12)) { cat.state = "sleep"; cat.idle = 0; say(lightsOff ? "curls up in the dark." : "fell asleep. Click to pet."); }
+    }
+    if (cat.state === "sleep") cat.idle += dt;
+    if (cat.blink < -3 - Math.random() * 3) cat.blink = 0.15;
+    cat.x = Math.max(60 * S, Math.min(W - 60 * S, cat.x));
+
+    if (yarn) {
+      yarn.vy += 900 * dt; yarn.x += yarn.vx * dt; yarn.y += yarn.vy * dt; yarn.rot += yarn.vx * dt / 14;
+      if (yarn.y > FLOOR - 12) { yarn.y = FLOOR - 12; yarn.vy *= -0.4; yarn.vx *= 0.985; if (Math.abs(yarn.vy) < 20) yarn.vy = 0; }
+      if (yarn.x < 20 || yarn.x > W - 20) { yarn.vx *= -0.7; yarn.x = Math.max(20, Math.min(W - 20, yarn.x)); }
+    }
+    if (fish) { fish.vy += 900 * dt; fish.y = Math.min(FLOOR - 6, fish.y + fish.vy * dt); }
+    for (const h of hearts) { h.y += h.vy * dt; h.life -= dt; }
+    hearts = hearts.filter(h => h.life > 0);
+    for (const z of zs) { z.y -= 22 * dt; z.x += Math.sin(z.life * 3) * 10 * dt; z.life -= dt; }
+    zs = zs.filter(z => z.life > 0);
+    for (const c of crumbs) { c.x += c.vx * dt; c.vy += 300 * dt; c.y = Math.min(FLOOR, c.y + c.vy * dt); c.life -= dt; }
+    crumbs = crumbs.filter(c => c.life > 0);
+    if (cat.purr > 0 && Math.random() < dt * 3) hearts.push({ x: cat.x + (Math.random() - 0.5) * 30, y: FLOOR - 60 * S, vy: -40, life: 1.2 });
+    $("mood").style.width = Math.round(cat.mood * 100) + "%";
+  }
+
+  // ----- the room -----
+  function room() {
+    const wall = lightsOff ? "#3a3550" : night ? "#5a5470" : dusk ? "#e7b98f" : "#f2dfbf";
+    ctx.fillStyle = wall; ctx.fillRect(0, 0, W, FLOOR);
+    // wallpaper stripes
+    ctx.fillStyle = "#00000008"; for (let x = 0; x < W; x += 36) ctx.fillRect(x, 0, 14, FLOOR);
+    // window with the real time of day
+    const wx = W * 0.62, wy = H * 0.14, ww = Math.min(260, W * 0.28), wh = ww * 0.8;
+    const sky = ctx.createLinearGradient(0, wy, 0, wy + wh);
+    if (night) { sky.addColorStop(0, "#0e1330"); sky.addColorStop(1, "#2a2d5c"); }
+    else if (dusk) { sky.addColorStop(0, "#f39a6b"); sky.addColorStop(1, "#fcd38a"); }
+    else { sky.addColorStop(0, "#7fc4f0"); sky.addColorStop(1, "#cfeaf8"); }
+    ctx.fillStyle = "#6b4a2f"; ctx.fillRect(wx - 10, wy - 10, ww + 20, wh + 20);
+    ctx.fillStyle = sky; ctx.fillRect(wx, wy, ww, wh);
+    if (night) { ctx.fillStyle = "#fff6d0"; ctx.beginPath(); ctx.arc(wx + ww * 0.7, wy + wh * 0.3, ww * 0.09, 0, 7); ctx.fill(); ctx.fillStyle = "#0e1330"; ctx.beginPath(); ctx.arc(wx + ww * 0.74, wy + wh * 0.27, ww * 0.08, 0, 7); ctx.fill(); for (let i = 0; i < 14; i++) { ctx.fillStyle = "#ffffffaa"; ctx.fillRect(wx + ((i * 73) % ww), wy + ((i * 41) % (wh * 0.7)), 2, 2); } }
+    else { ctx.fillStyle = dusk ? "#ffe9b0" : "#fff8d6"; ctx.beginPath(); ctx.arc(wx + ww * 0.3, wy + wh * (dusk ? 0.75 : 0.3), ww * 0.1, 0, 7); ctx.fill(); ctx.fillStyle = "#ffffffcc"; ctx.beginPath(); ctx.ellipse(wx + ww * 0.65, wy + wh * 0.35, ww * 0.16, wh * 0.06, 0, 0, 7); ctx.fill(); }
+    ctx.fillStyle = "#6b4a2f"; ctx.fillRect(wx + ww / 2 - 4, wy, 8, wh); ctx.fillRect(wx, wy + wh / 2 - 4, ww, 8);
+    ctx.fillStyle = "#8a6440"; ctx.fillRect(wx - 18, wy + wh + 8, ww + 36, 10);
+    // a framed picture of a fish (Biscuit's favourite)
+    const px = Math.max(W * 0.36, 310), py = H * 0.24;
+    ctx.fillStyle = "#c9a36b"; ctx.fillRect(px, py, 90, 70); ctx.fillStyle = "#fbf3df"; ctx.fillRect(px + 8, py + 8, 74, 54);
+    ctx.fillStyle = "#6fa8dc"; ctx.beginPath(); ctx.ellipse(px + 45, py + 35, 20, 10, 0, 0, 7); ctx.fill(); ctx.beginPath(); ctx.moveTo(px + 62, py + 35); ctx.lineTo(px + 74, py + 26); ctx.lineTo(px + 74, py + 44); ctx.fill();
+    // floor + rug
+    ctx.fillStyle = lightsOff ? "#3a2a1c" : "#a87a4f"; ctx.fillRect(0, FLOOR, W, H - FLOOR);
+    ctx.strokeStyle = "#00000014"; for (let x = 0; x < W; x += 80) { ctx.beginPath(); ctx.moveTo(x, FLOOR); ctx.lineTo(x - 40, H); ctx.stroke(); }
+    ctx.fillStyle = lightsOff ? "#4a2a3a" : "#c95d63"; ctx.beginPath(); ctx.ellipse(W * 0.5, FLOOR + (H - FLOOR) * 0.45, W * 0.32, (H - FLOOR) * 0.32, 0, 0, 7); ctx.fill();
+    ctx.strokeStyle = "#ffffff44"; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(W * 0.5, FLOOR + (H - FLOOR) * 0.45, W * 0.27, (H - FLOOR) * 0.24, 0, 0, 7); ctx.stroke(); ctx.lineWidth = 1;
+    ctx.fillStyle = "#00000022"; ctx.fillRect(0, FLOOR, W, 4);
+  }
+
+  function drawCat() {
+    const s = S, x = cat.x, y = FLOOR;
+    ctx.save(); ctx.translate(x, y); ctx.scale(cat.face * s, s);
+    const fur = "#e89a4f", dark = "#b8692a", cream = "#fbe3c4", line = "#4a2e1a";
+    ctx.lineWidth = 2.5; ctx.strokeStyle = line; ctx.lineCap = "round"; ctx.lineJoin = "round";
+    // shadow
+    ctx.fillStyle = "#00000022"; ctx.beginPath(); ctx.ellipse(0, 2, 44, 6, 0, 0, 7); ctx.fill();
+    const breathe = Math.sin(cat.t * 2.2) * 1.2;
+    if (cat.state === "sleep") {
+      ctx.fillStyle = fur;
+      ctx.beginPath(); ctx.ellipse(0, -16, 40, 18 + breathe * 0.5, 0, 0, 7); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-34, -10); ctx.quadraticCurveTo(-10, 10, 30, -2); ctx.lineWidth = 9; ctx.strokeStyle = fur; ctx.stroke(); ctx.lineWidth = 2.5; ctx.strokeStyle = line;
+      ctx.fillStyle = dark; for (const k of [-18, -4, 10]) { ctx.beginPath(); ctx.ellipse(k, -30, 4, 2.5, 0, 0, 7); ctx.fill(); }
+      // head tucked
+      ctx.fillStyle = fur; ctx.beginPath(); ctx.arc(30, -14, 13, 0, 7); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(24, -25); ctx.lineTo(27, -34); ctx.lineTo(33, -26); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(26, -14); ctx.quadraticCurveTo(29, -11, 32, -14); ctx.stroke();
+      ctx.restore(); return;
+    }
+    const walking = cat.state === "walk", step = cat.t * 12;
+    const bob = walking ? Math.abs(Math.sin(step)) * -2 : breathe * 0.4;
+    // tail
+    const swish = Math.sin(cat.t * (walking ? 6 : 2)) * (cat.purr > 0 ? 4 : 10);
+    ctx.lineWidth = 8; ctx.strokeStyle = fur;
+    ctx.beginPath();
+    if (walking) { ctx.moveTo(-28, -34 + bob); ctx.quadraticCurveTo(-50, -50 + swish, -46, -72 + swish); }
+    else { ctx.moveTo(-14, -6); ctx.quadraticCurveTo(-46, -2, -40 + swish * 0.3, -26 + swish * 0.4); }
+    ctx.stroke(); ctx.lineWidth = 2.5; ctx.strokeStyle = line;
+    if (walking) {
+      // legs
+      ctx.strokeStyle = dark; ctx.lineWidth = 6;
+      for (const [lx, ph] of [[-20, 0], [-12, Math.PI], [14, Math.PI], [22, 0]]) {
+        const a = Math.sin(step + ph) * 0.5;
+        ctx.beginPath(); ctx.moveTo(lx, -24 + bob); ctx.lineTo(lx + Math.sin(a) * 12, -2); ctx.stroke();
+      }
+      ctx.lineWidth = 2.5; ctx.strokeStyle = line;
+      ctx.fillStyle = fur; ctx.beginPath(); ctx.ellipse(0, -34 + bob, 34, 15, 0, 0, 7); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = dark; for (const k of [-16, -4, 8]) { ctx.beginPath(); ctx.ellipse(k, -46 + bob, 3, 4, 0.3, 0, 7); ctx.fill(); }
+    } else {
+      // sitting: upright body, front paws together
+      ctx.fillStyle = fur; ctx.beginPath(); ctx.ellipse(-2, -30 + breathe, 24, 30, -0.12, 0, 7); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = cream; ctx.beginPath(); ctx.ellipse(8, -26 + breathe, 10, 18, -0.1, 0, 7); ctx.fill();
+      ctx.fillStyle = fur; ctx.beginPath(); ctx.ellipse(10, -4, 7, 5, 0, 0, 7); ctx.ellipse(20, -4, 7, 5, 0, 0, 7); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = dark; for (const k of [-44, -34, -24]) { ctx.beginPath(); ctx.ellipse(-14, k + 20 + breathe, 5, 2.5, -0.4, 0, 7); ctx.fill(); }
+    }
+    // head
+    const hx = walking ? 34 : 12, hy = (walking ? -46 : -64) + bob + (cat.state === "eat" ? 22 + Math.sin(cat.t * 14) * 2 : 0);
+    ctx.fillStyle = fur;
+    ctx.beginPath(); ctx.moveTo(hx - 12, hy - 8); ctx.lineTo(hx - 9, hy - 26); ctx.lineTo(hx - 1, hy - 13); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(hx + 4, hy - 13); ctx.lineTo(hx + 12, hy - 26); ctx.lineTo(hx + 15, hy - 8); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#f4a3a8"; ctx.beginPath(); ctx.moveTo(hx - 9, hy - 12); ctx.lineTo(hx - 8, hy - 21); ctx.lineTo(hx - 4, hy - 13); ctx.fill();
+    ctx.fillStyle = fur; ctx.beginPath(); ctx.ellipse(hx + 1, hy, 17, 14, 0, 0, 7); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = cream; ctx.beginPath(); ctx.ellipse(hx + 6, hy + 5, 8, 6, 0, 0, 7); ctx.fill();
+    // eyes follow the pointer a little
+    const look = pointer.inside ? Math.max(-1, Math.min(1, (pointer.y - (FLOOR + hy * S)) / 200)) : 0;
+    ctx.fillStyle = line;
+    if (cat.blink > 0 || cat.purr > 0 || cat.state === "eat") { ctx.beginPath(); ctx.moveTo(hx - 6, hy - 2); ctx.quadraticCurveTo(hx - 3, hy + 1, hx, hy - 2); ctx.moveTo(hx + 6, hy - 2); ctx.quadraticCurveTo(hx + 9, hy + 1, hx + 12, hy - 2); ctx.stroke(); }
+    else { for (const ex of [hx - 3, hx + 9]) { ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.ellipse(ex, hy - 2, 3.4, 4.4, 0, 0, 7); ctx.fill(); ctx.fillStyle = line; ctx.beginPath(); ctx.ellipse(ex + 0.8, hy - 2 + look * 1.6, 1.8, 3.4, 0, 0, 7); ctx.fill(); } }
+    ctx.fillStyle = "#e0777f"; ctx.beginPath(); ctx.moveTo(hx + 5, hy + 3); ctx.lineTo(hx + 9, hy + 3); ctx.lineTo(hx + 7, hy + 6); ctx.fill();
+    ctx.lineWidth = 1.2; ctx.strokeStyle = "#4a2e1a99";
+    for (const k of [-1, 1]) { ctx.beginPath(); ctx.moveTo(hx + 12, hy + 5); ctx.lineTo(hx + 28, hy + 3 + k * 4); ctx.stroke(); ctx.beginPath(); ctx.moveTo(hx, hy + 5); ctx.lineTo(hx - 14, hy + 3 + k * 4); ctx.stroke(); }
+    ctx.restore();
+  }
+
+  function draw(now) {
+    room();
+    if (fish) { ctx.fillStyle = "#6fa8dc"; ctx.beginPath(); ctx.ellipse(fish.x, fish.y, 16, 7, 0, 0, 7); ctx.fill(); ctx.beginPath(); ctx.moveTo(fish.x + 13, fish.y); ctx.lineTo(fish.x + 24, fish.y - 7); ctx.lineTo(fish.x + 24, fish.y + 7); ctx.fill(); ctx.fillStyle = "#222"; ctx.beginPath(); ctx.arc(fish.x - 9, fish.y - 2, 1.6, 0, 7); ctx.fill(); }
+    if (yarn) {
+      ctx.save(); ctx.translate(yarn.x, yarn.y); ctx.rotate(yarn.rot);
+      ctx.fillStyle = "#7a5cc8"; ctx.beginPath(); ctx.arc(0, 0, 12, 0, 7); ctx.fill();
+      ctx.strokeStyle = "#b9a3ff"; ctx.lineWidth = 1.5; for (let k = -2; k <= 2; k++) { ctx.beginPath(); ctx.ellipse(0, 0, 12, Math.abs(k) * 3 + 2, k * 0.6, 0, 7); ctx.stroke(); }
+      ctx.restore();
+      ctx.strokeStyle = "#7a5cc8"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(yarn.x, yarn.y + 10); ctx.quadraticCurveTo(yarn.x - 30, FLOOR + 6, yarn.x - 60, FLOOR + 2); ctx.stroke();
+    }
+    drawCat();
+    for (const c of crumbs) { ctx.fillStyle = "#6fa8dc"; ctx.fillRect(c.x, c.y, 3, 3); }
+    ctx.font = "700 26px Gaegu, cursive"; ctx.textAlign = "center";
+    for (const h of hearts) { ctx.globalAlpha = Math.min(1, h.life); ctx.fillStyle = "#e86f5a"; ctx.fillText("♥", h.x, h.y); }
+    for (const z of zs) { ctx.globalAlpha = Math.min(1, z.life); ctx.fillStyle = lightsOff ? "#d8d4ff" : "#5a4a8a"; ctx.fillText("z", z.x, z.y); }
+    ctx.globalAlpha = 1;
+    if (lightsOff) {
+      ctx.fillStyle = "#0b0a1aa6"; ctx.fillRect(0, 0, W, H);
+      const g = ctx.createRadialGradient(W * 0.62 + Math.min(130, W * 0.14), H * 0.25, 10, W * 0.62, H * 0.3, W * 0.5);
+      g.addColorStop(0, "#b8c4ff22"); g.addColorStop(1, "#b8c4ff00"); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    }
+  }
+
+  let last = performance.now();
+  function frame(now) { const dt = Math.min(0.05, (now - last) / 1000); last = now; update(dt); draw(now); requestAnimationFrame(frame); }
+  say(night ? "is wide awake. It's nighttime, after all." : "is watching you.");
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

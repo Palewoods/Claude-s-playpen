@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Absurd Units</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rammetto+One&family=Rubik:wght@400;500;700&display=swap">
+<style>
+  /* Layout: one big sentence you fill in, a hero answer under it, then a grid of every other absurd equivalent. */
+  :root {
+    --bg: #f3f0fb;
+    --card: #ffffff;
+    --ink: #221d33;
+    --muted: #6b6485;
+    --line: #ddd7ef;
+    --accent: #e4572e;
+    --accent-soft: #fde4da;
+    --display: "Rammetto One", "Cooper Black", Georgia, serif;
+    --body: "Rubik", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #15121f; --card: #1f1a2d; --ink: #efeaff; --muted: #a39cbd; --line: #322b47; --accent: #ff7a52; --accent-soft: #3a2220; color-scheme: dark; }
+  }
+  :root[data-theme="dark"] { --bg: #15121f; --card: #1f1a2d; --ink: #efeaff; --muted: #a39cbd; --line: #322b47; --accent: #ff7a52; --accent-soft: #3a2220; color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 400 16px/1.55 var(--body); padding-inline: 16px; padding-block: 24px 40px; }
+  .wrap { max-width: 900px; margin: 0 auto; display: grid; gap: 22px; }
+  header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  h1 { margin: 0; font: 400 clamp(30px, 7vw, 52px)/1 var(--display); letter-spacing: -0.01em; }
+  h1 span { color: var(--accent); }
+  header a { color: var(--muted); text-decoration: none; }
+  header a:hover { color: var(--ink); }
+  .ask { font: 500 clamp(20px, 4vw, 30px)/1.5 var(--body); display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; }
+  .ask input, .ask select {
+    font: 700 inherit/1.2 var(--body); font-size: inherit; color: var(--accent); background: transparent; border: 0; border-bottom: 3px solid var(--accent);
+    padding: 0 4px; border-radius: 0; min-width: 0;
+  }
+  .ask input { width: 5.5ch; text-align: right; }
+  .ask select { cursor: pointer; }
+  .cats { display: flex; flex-wrap: wrap; gap: 6px; }
+  .cats button { font: 500 14px var(--body); color: var(--muted); background: var(--card); border: 1.5px solid var(--line); border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+  .cats button[aria-pressed="true"] { color: var(--ink); border-color: var(--ink); }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .hero { background: var(--accent-soft); border-radius: 18px; padding: 22px; display: grid; gap: 10px; }
+  .hero .big { font: 400 clamp(26px, 6vw, 46px)/1.1 var(--display); text-wrap: balance; }
+  .hero .big b { color: var(--accent); font-weight: 400; }
+  .hero p { margin: 0; color: var(--muted); max-width: 62ch; }
+  .picto { font-size: 28px; line-height: 1.15; letter-spacing: 2px; word-break: break-all; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 12px; }
+  .u { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; align-items: center; cursor: pointer; text-align: left; font: inherit; color: inherit; }
+  .u:hover { border-color: var(--muted); }
+  .u .e { grid-row: span 2; font-size: 30px; }
+  .u .n { font: 700 20px/1.2 var(--body); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .u .l { color: var(--muted); font-size: 14px; }
+  .u[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .fine { color: var(--muted); font-size: 13.5px; margin: 0; max-width: 70ch; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>Absurd <span>Units</span></h1><a href="index.html">&larr; playpen</a></header>
+  <div class="cats" id="cats" role="group" aria-label="What are you measuring?"></div>
+  <div class="ask">
+    <label for="val">How much is</label>
+    <input id="val" type="text" inputmode="decimal" value="100" aria-label="Amount">
+    <select id="from" aria-label="Unit"></select>
+    <span>really?</span>
+  </div>
+  <section class="hero" aria-live="polite">
+    <div class="big" id="big"></div>
+    <div class="picto" id="picto" aria-hidden="true"></div>
+    <p id="fact"></p>
+  </section>
+  <div class="grid" id="grid"></div>
+  <p class="fine">All figures are typical or approximate: real bananas, giraffes and bathtubs vary. The smoot, the hogshead, the jiffy, the moment and the microcentury are genuine historical or informal units. The Library of Congress figure is a popular informal estimate, not an official one.</p>
+</div>
+<script>
+(() => {
+  // base units: metres, kilograms, seconds, litres, bytes
+  const CATS = {
+    length: {
+      label: "length", from: [["m", "metres", 1], ["cm", "centimetres", 0.01], ["km", "kilometres", 1000], ["ft", "feet", 0.3048], ["in", "inches", 0.0254], ["mi", "miles", 1609.344]],
+      units: [
+        ["🍌", "bananas", 0.18, "laid end to end", "A banana is about 18 cm long, give or take a curve."],
+        ["🧍", "smoots", 1.7018, "", "In 1958, MIT students measured the Harvard Bridge using their classmate Oliver Smoot. It's 364.4 smoots, plus or minus one ear."],
+        ["🦒", "giraffes", 5.0, "stacked hoof to horn", "A tall adult giraffe stands about 5 metres, mostly neck and optimism."],
+        ["🚌", "double-decker buses", 11, "parked nose to tail", "A modern double-decker bus is around 11 metres long."],
+        ["🐋", "blue whales", 25, "swimming in a line", "Blue whales reach about 25 metres, the largest animal known to have ever lived."],
+        ["🏟️", "football pitches", 105, "", "A standard international football pitch is 105 metres long."],
+        ["🗼", "Eiffel Towers", 330, "on top of each other", "The Eiffel Tower is about 330 metres tall, including its antennas."],
+        ["🏔️", "Mount Everests", 8849, "", "Everest's summit is 8,849 metres above sea level, per the 2020 survey."],
+        ["🏃", "marathons", 42195, "", "A marathon is exactly 42.195 km, a distance set at the 1908 London Olympics."],
+        ["💡", "light-nanoseconds", 0.2998, "", "Light travels about 30 cm in one nanosecond. Grace Hopper famously handed out pieces of wire this long."],
+      ] },
+    mass: {
+      label: "weight", from: [["kg", "kilograms", 1], ["g", "grams", 0.001], ["t", "tonnes", 1000], ["lb", "pounds", 0.45359237], ["oz", "ounces", 0.0283495]],
+      units: [
+        ["📎", "paperclips", 0.001, "", "A standard paperclip weighs about a gram."],
+        ["🍌", "bananas", 0.12, "", "A medium banana weighs about 120 grams."],
+        ["🐈", "house cats", 4.5, "", "An average house cat weighs about 4.5 kg. Biscuit is slightly above average."],
+        ["🎳", "bowling balls", 7.26, "", "The heaviest legal ten-pin bowling ball is 16 lb, or about 7.26 kg."],
+        ["🎹", "grand pianos", 480, "", "A concert grand piano weighs around 480 kg."],
+        ["🦛", "hippos", 1500, "", "An adult hippo weighs about 1.5 tonnes, and can still outrun you."],
+        ["🐘", "African elephants", 6000, "", "An adult African elephant weighs about 6 tonnes."],
+        ["🐋", "blue whales", 150000, "", "A big blue whale weighs about 150 tonnes. Its heart alone is about the size of a golf cart."],
+        ["🗽", "Statues of Liberty", 204000, "", "Lady Liberty's copper skin and iron frame weigh about 204 tonnes."],
+        ["🗼", "Eiffel Towers", 7300000, "", "The Eiffel Tower's iron structure weighs about 7,300 tonnes."],
+      ] },
+    time: {
+      label: "time", from: [["min", "minutes", 60], ["s", "seconds", 1], ["h", "hours", 3600], ["day", "days", 86400], ["wk", "weeks", 604800], ["yr", "years", 31557600]],
+      units: [
+        ["⚡", "jiffies", 1 / 60, "", "In electronics, a jiffy is one cycle of 60 Hz mains power: one sixtieth of a second."],
+        ["💓", "heartbeats", 0.857, "", "At 70 beats per minute, each heartbeat takes about 0.86 seconds."],
+        ["🎵", "plays of Never Gonna Give You Up", 213, "back to back", "The song runs 3 minutes and 33 seconds. You know the rules."],
+        ["⏳", "medieval moments", 90, "", "In medieval timekeeping, a moment was a fortieth of an hour: 90 seconds."],
+        ["📺", "sitcom episodes", 1320, "", "A network sitcom episode runs about 22 minutes without ads."],
+        ["🎓", "microcenturies", 3155.76, "", "A microcentury is about 52.6 minutes. The physicist Enrico Fermi supposedly said that was the right length for a lecture."],
+        ["💍", "extended Lord of the Rings trilogies", 41400, "", "The three extended editions run roughly 11½ hours, depending on whether you sit through the credits."],
+        ["🔴", "days on Mars", 88775, "", "A Martian day, or sol, lasts 24 hours, 39 minutes and 35 seconds."],
+        ["📅", "fortnights", 1209600, "", "A fortnight is fourteen nights, from the Old English for exactly that."],
+      ] },
+    volume: {
+      label: "volume", from: [["L", "litres", 1], ["mL", "millilitres", 0.001], ["m³", "cubic metres", 1000], ["gal", "US gallons", 3.78541], ["cup", "US cups", 0.236588]],
+      units: [
+        ["🥄", "teaspoons", 0.00493, "", "A US teaspoon holds about 4.9 millilitres."],
+        ["🍵", "cups of tea", 0.25, "", "A generous mug of tea holds about 250 ml."],
+        ["🛁", "bathtubs", 150, "", "A full domestic bathtub holds around 150 litres."],
+        ["🛢️", "hogsheads", 238.5, "", "A wine hogshead is 63 US gallons, about 238.5 litres. Yes, really."],
+        ["♨️", "hot tubs", 1500, "", "A typical six-person hot tub holds about 1,500 litres."],
+        ["🏊", "Olympic swimming pools", 2500000, "", "An Olympic pool is 50 m × 25 m × at least 2 m: at least 2.5 million litres."],
+      ] },
+    data: {
+      label: "data", from: [["MB", "megabytes", 1e6], ["B", "bytes", 1], ["KB", "kilobytes", 1e3], ["GB", "gigabytes", 1e9], ["TB", "terabytes", 1e12]],
+      units: [
+        ["🐦", "140-character posts", 140, "", "The original limit for a post on Twitter was 140 characters."],
+        ["💾", "floppy disks", 1474560, "", "A \"1.44 MB\" floppy disk actually holds 1,474,560 bytes. The label mixes two kinds of megabyte."],
+        ["📚", "copies of War and Peace", 3.3e6, "as plain text", "Tolstoy's novel is about 3.3 MB of plain text, nearly 590,000 words."],
+        ["🧬", "human genomes", 7.5e8, "", "Three billion DNA base pairs at 2 bits each comes to about 750 MB."],
+        ["💿", "CD-ROMs", 7.34e8, "", "A standard CD holds 700 MiB, about 734 million bytes."],
+        ["🏛️", "Libraries of Congress", 1e13, "", "A popular informal estimate puts the text of the Library of Congress's books at around 10 TB."],
+      ] },
+  };
+  const $ = id => document.getElementById(id);
+  let cat = "length", pinned = null;
+
+  const SUP = { "-": "⁻", 0: "⁰", 1: "¹", 2: "²", 3: "³", 4: "⁴", 5: "⁵", 6: "⁶", 7: "⁷", 8: "⁸", 9: "⁹" };
+  function fmt(n) {
+    if (!isFinite(n)) return "∞";
+    const a = Math.abs(n);
+    if (a === 0) return "0";
+    if (a >= 1e9 || a < 1e-4) { const e = Math.floor(Math.log10(a)), m = n / Math.pow(10, e); return `${m.toFixed(2)} × 10${String(e).split("").map(c => SUP[c]).join("")}`; }
+    if (a >= 100) return Math.round(n).toLocaleString();
+    if (a >= 10) return n.toFixed(1);
+    if (a >= 1) return n.toFixed(2);
+    return n.toPrecision(2);
+  }
+
+  function setCat(c) {
+    cat = c; pinned = null;
+    const sel = $("from"); sel.innerHTML = CATS[c].from.map(([k, name], i) => `<option value="${i}">${name}</option>`).join("");
+    $("val").value = { length: "100", mass: "70", time: "1", volume: "1", data: "1" }[c];
+    if (c === "time") sel.value = "2"; if (c === "data") sel.value = "3";
+    document.querySelectorAll("#cats button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.c === c)));
+    render();
+  }
+  $("cats").innerHTML = Object.entries(CATS).map(([k, v]) => `<button type="button" data-c="${k}">${v.label}</button>`).join("");
+  $("cats").addEventListener("click", e => { const b = e.target.closest("button"); if (b) setCat(b.dataset.c); });
+
+  function render() {
+    const C = CATS[cat], raw = parseFloat($("val").value.replace(/,/g, ""));
+    const v = isNaN(raw) ? 0 : raw, [ab, name, factor] = C.from[+$("from").value], base = v * factor;
+    const rows = C.units.map(u => ({ u, n: base / u[2] }));
+    // the hero is whichever unit lands closest to a satisfying count (around 3 to 30)
+    let hero = pinned != null ? rows[pinned] : rows.reduce((a, b) => Math.abs(Math.log10(Math.max(b.n, 1e-12)) - 0.9) < Math.abs(Math.log10(Math.max(a.n, 1e-12)) - 0.9) ? b : a);
+    const [e, uname, , how, fact] = hero.u;
+    $("big").innerHTML = base ? `${fmt(v)} ${name} is <b>${fmt(hero.n)} ${uname}</b>${how ? " " + how : ""}.` : "Type a number to see it in bananas.";
+    const cnt = Math.round(hero.n);
+    $("picto").textContent = base && cnt >= 1 && cnt <= 60 ? e.repeat(cnt) : base && hero.n < 1 && hero.n > 0.05 ? `${e} × ${hero.n.toFixed(2)}` : "";
+    $("fact").textContent = fact;
+    $("grid").innerHTML = rows.map((r, i) => `<button type="button" class="u" data-i="${i}" aria-pressed="${r === hero}"><span class="e" aria-hidden="true">${r.u[0]}</span><span class="n">${fmt(r.n)}</span><span class="l">${r.u[1]}</span></button>`).join("");
+  }
+  $("grid").addEventListener("click", e => { const b = e.target.closest(".u"); if (b) { pinned = +b.dataset.i; render(); } });
+  $("val").addEventListener("input", () => { pinned = null; render(); });
+  $("from").addEventListener("change", () => { pinned = null; render(); });
+  setCat("length");
+})();
+</script>
+</body>
+</html>

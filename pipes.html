@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pipes</title>
+<style>
+  /* Layout: a screensaver. Nothing but the pipes, a faint caption that fades away, and a way back. */
+  :root { --ink: #ffffffb0; color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: #000; color: var(--ink); font: 13px/1.4 "Tahoma", "Verdana", system-ui, sans-serif; overflow: hidden; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: none; }
+  .note { position: fixed; left: 16px; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); transition: opacity 1.2s; pointer-events: none; }
+  .note.gone { opacity: 0; }
+  a { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); right: 16px; color: #ffffff80; text-decoration: none; transition: opacity 1.2s; }
+  a:hover { color: #fff; }
+  a.gone { opacity: 0; }
+  a:focus-visible { outline: 2px solid #fff; outline-offset: 3px; opacity: 1; }
+</style>
+</head>
+<body>
+<canvas id="c" aria-label="3D pipes screensaver"></canvas>
+<a href="index.html" id="back">&larr; playpen</a>
+<p class="note" id="note">Pipes. Click for a fresh start, press space to pause. Move the mouse to bring back the link.</p>
+<script>
+(() => {
+  const canvas = document.getElementById("c"), ctx = canvas.getContext("2d");
+  const dpr = Math.min(2, devicePixelRatio || 1);
+  let W, H;
+  const N = 14;                       // the grid is N x N x N
+  const DIRS = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+  const HUES = [0, 30, 55, 120, 175, 210, 270, 315];
+  let occ, pipes, segs, paused = false, yaw = 0.6, pitch = 0.35, joints;
+
+  function resize() { W = innerWidth; H = innerHeight; canvas.width = W * dpr; canvas.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
+  addEventListener("resize", resize); resize();
+
+  function reset() {
+    occ = new Uint8Array(N * N * N); pipes = []; segs = []; joints = [];
+    yaw = Math.random() * Math.PI * 2; pitch = 0.25 + Math.random() * 0.3;
+    for (let i = 0; i < 4; i++) newPipe();
+  }
+  const idx = (x, y, z) => (x * N + y) * N + z;
+  const inside = (x, y, z) => x >= 0 && y >= 0 && z >= 0 && x < N && y < N && z < N;
+  function newPipe() {
+    for (let tries = 0; tries < 50; tries++) {
+      const x = Math.random() * N | 0, y = Math.random() * N | 0, z = Math.random() * N | 0;
+      if (occ[idx(x, y, z)]) continue;
+      occ[idx(x, y, z)] = 1;
+      const p = { x, y, z, dir: DIRS[Math.random() * 6 | 0], hue: HUES[Math.random() * HUES.length | 0], alive: true, len: 0 };
+      pipes.push(p); joints.push({ x, y, z, hue: p.hue, r: 0.32 });
+      return;
+    }
+  }
+  function grow(p) {
+    if (!p.alive) return;
+    // mostly keep going straight, sometimes turn
+    const options = DIRS.filter(d => { const nx = p.x + d[0], ny = p.y + d[1], nz = p.z + d[2]; return inside(nx, ny, nz) && !occ[idx(nx, ny, nz)]; });
+    if (!options.length) { p.alive = false; joints.push({ x: p.x, y: p.y, z: p.z, hue: p.hue, r: 0.32 }); return; }
+    const straight = options.find(d => d === p.dir);
+    let d = straight && Math.random() < 0.78 ? straight : options[Math.random() * options.length | 0];
+    if (d !== p.dir) joints.push({ x: p.x, y: p.y, z: p.z, hue: p.hue, r: 0.3, teapot: Math.random() < 0.012 });
+    p.dir = d;
+    const nx = p.x + d[0], ny = p.y + d[1], nz = p.z + d[2];
+    segs.push({ a: [p.x, p.y, p.z], b: [nx, ny, nz], hue: p.hue });
+    occ[idx(nx, ny, nz)] = 1; p.x = nx; p.y = ny; p.z = nz; p.len++;
+  }
+
+  // simple perspective camera orbiting the cube's centre
+  function project([x, y, z]) {
+    const c = (N - 1) / 2; x -= c; y -= c; z -= c;
+    const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+    let X = x * cy - z * sy, Z = x * sy + z * cy;
+    let Y = y * cp - Z * sp; Z = y * sp + Z * cp;
+    const dist = N * 1.9, f = Math.min(W, H) * 1.25 / (Z + dist);
+    return [W / 2 + X * f, H / 2 - Y * f, Z, f];
+  }
+  function draw() {
+    ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H);
+    // painter's algorithm: far things first
+    const items = [];
+    for (const s of segs) { const A = project(s.a), B = project(s.b); items.push({ z: (A[2] + B[2]) / 2, A, B, hue: s.hue }); }
+    for (const j of joints) { const P = project([j.x, j.y, j.z]); items.push({ z: P[2] - 0.01, P, hue: j.hue, joint: j }); }
+    items.sort((a, b) => b.z - a.z);
+    // light comes from the upper left; shade by depth so the cube has volume
+    for (const it of items) {
+      const fog = Math.max(0.35, Math.min(1, 1 - (it.z + N / 2) / (N * 1.6)));
+      if (it.joint) {
+        const [x, y, , f] = it.P, r = f * it.joint.r;
+        if (it.joint.teapot) { teapot(x, y, r * 1.6, it.hue, fog); continue; }
+        const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.35, r * 0.1, x, y, r);
+        g.addColorStop(0, `hsl(${it.hue}, 80%, ${80 * fog}%)`); g.addColorStop(0.6, `hsl(${it.hue}, 75%, ${48 * fog}%)`); g.addColorStop(1, `hsl(${it.hue}, 80%, ${18 * fog}%)`);
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+      } else {
+        const [ax, ay, , af] = it.A, [bx, by, , bf] = it.B, r = (af + bf) / 2 * 0.22;
+        // fake a cylinder: dark edge, mid body, bright specular stripe offset toward the light
+        const nx = -(by - ay), ny = bx - ax, nl = Math.hypot(nx, ny) || 1, ox = nx / nl, oy = ny / nl;
+        const side = ox * -0.7 + oy * -0.7 > 0 ? 1 : -1;
+        ctx.lineCap = "round";
+        ctx.strokeStyle = `hsl(${it.hue}, 80%, ${16 * fog}%)`; ctx.lineWidth = r * 2; ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+        ctx.strokeStyle = `hsl(${it.hue}, 75%, ${44 * fog}%)`; ctx.lineWidth = r * 1.45; ctx.beginPath(); ctx.moveTo(ax + ox * side * r * 0.15, ay + oy * side * r * 0.15); ctx.lineTo(bx + ox * side * r * 0.15, by + oy * side * r * 0.15); ctx.stroke();
+        ctx.strokeStyle = `hsl(${it.hue}, 90%, ${78 * fog}%)`; ctx.lineWidth = r * 0.35; ctx.beginPath(); ctx.moveTo(ax + ox * side * r * 0.5, ay + oy * side * r * 0.5); ctx.lineTo(bx + ox * side * r * 0.5, by + oy * side * r * 0.5); ctx.stroke();
+      }
+    }
+  }
+  // the famous easter egg: once in a while a joint is a teapot
+  function teapot(x, y, r, hue, fog) {
+    ctx.save(); ctx.translate(x, y);
+    const g = ctx.createRadialGradient(-r * 0.3, -r * 0.3, r * 0.1, 0, 0, r);
+    g.addColorStop(0, `hsl(${hue}, 80%, ${82 * fog}%)`); g.addColorStop(1, `hsl(${hue}, 80%, ${25 * fog}%)`);
+    ctx.fillStyle = g; ctx.strokeStyle = g; ctx.lineWidth = r * 0.18;
+    ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.72, 0, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(r * 0.85, -r * 0.1); ctx.quadraticCurveTo(r * 1.5, -r * 0.2, r * 1.6, -r * 0.7); ctx.stroke();
+    ctx.beginPath(); ctx.arc(-r * 1.0, 0, r * 0.38, Math.PI * 0.5, Math.PI * 1.5); ctx.stroke();
+    ctx.fillRect(-r * 0.5, -r * 0.82, r, r * 0.16);
+    ctx.beginPath(); ctx.arc(0, -r * 0.92, r * 0.13, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+
+  let t = 0, last = performance.now(), acc = 0;
+  function frame(now) {
+    const dt = Math.min(0.1, (now - last) / 1000); last = now;
+    if (!paused) {
+      acc += dt;
+      while (acc > 0.045) {
+        acc -= 0.045;
+        pipes.forEach(grow);
+        if (!pipes.some(p => p.alive) || Math.random() < 0.01) newPipe();
+        // once the cube is crowded, wipe and start over like the original
+        if (segs.length > N * N * N * 0.33) reset();
+      }
+      yaw += dt * 0.05;
+    }
+    draw();
+    requestAnimationFrame(frame);
+  }
+
+  // UI fades away like a real screensaver
+  let idle = 0;
+  const note = document.getElementById("note"), back = document.getElementById("back");
+  function wake() { idle = 0; note.classList.remove("gone"); back.classList.remove("gone"); }
+  setInterval(() => { if (++idle > 3) { note.classList.add("gone"); back.classList.add("gone"); } }, 1000);
+  addEventListener("pointermove", wake);
+  canvas.addEventListener("click", () => { reset(); wake(); });
+  addEventListener("keydown", e => { if (e.key === " ") { e.preventDefault(); paused = !paused; } wake(); });
+  reset();
+  // pre-grow a little so the first frame isn't empty
+  for (let k = 0; k < 60; k++) { pipes.forEach(grow); if (!pipes.some(p => p.alive)) newPipe(); }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Crate Expectations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Darumadrop+One&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+  /* Layout: a stencilled warehouse sign for a title, level chips, the floor plan centred, controls beneath. */
+  :root {
+    --bg: #eceae4;
+    --ink: #24221e;
+    --muted: #6e6a60;
+    --floor: #d9d4c7;
+    --floor2: #d2ccbe;
+    --wall: #4a4f5a;
+    --wall-top: #5d6370;
+    --crate: #c98b3c;
+    --crate-dk: #8f5d22;
+    --goal: #e0533d;
+    --done: #2f9e6e;
+    --bot: #2f6fd6;
+    --chip: #ffffff;
+    --display: "Darumadrop One", "Cooper Black", system-ui, sans-serif;
+    --body: "Atkinson Hyperlegible", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #16171a; --ink: #ecebe6; --muted: #9a978e; --floor: #2a2b30; --floor2: #26272b; --wall: #545b6a; --wall-top: #6a7283; --chip: #222328; --goal: #ff7a63; --done: #4fd1a0; --bot: #6ea3ff; color-scheme: dark; }
+  }
+  :root[data-theme="dark"] { --bg: #16171a; --ink: #ecebe6; --muted: #9a978e; --floor: #2a2b30; --floor2: #26272b; --wall: #545b6a; --wall-top: #6a7283; --chip: #222328; --goal: #ff7a63; --done: #4fd1a0; --bot: #6ea3ff; color-scheme: dark; }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 400 15px/1.5 var(--body); padding-inline: 16px; padding-block: 18px 28px; }
+  .wrap { max-width: 720px; margin: 0 auto; display: grid; gap: 14px; }
+  header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  h1 { margin: 0; font: 400 clamp(30px, 7vw, 46px)/1 var(--display); letter-spacing: 0.01em; }
+  header a { color: var(--muted); text-decoration: none; }
+  header a:hover { color: var(--ink); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips button { font: 700 13px var(--body); min-width: 34px; padding: 6px 8px; border-radius: 8px; border: 1.5px solid #8885; background: var(--chip); color: var(--ink); cursor: pointer; }
+  .chips button[aria-current="true"] { border-color: var(--ink); }
+  .chips button.solved { background: var(--done); border-color: var(--done); color: #fff; }
+  .info { display: flex; flex-wrap: wrap; gap: 4px 18px; align-items: baseline; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .info b { color: var(--ink); }
+  .info .name { font-weight: 700; color: var(--ink); font-size: 17px; }
+  #board { width: 100%; display: block; touch-action: none; border-radius: 12px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn { font: 700 14px var(--body); color: var(--ink); background: var(--chip); border: 1.5px solid #8885; border-radius: 999px; padding: 7px 14px; cursor: pointer; }
+  .btn:disabled { opacity: 0.4; cursor: default; }
+  .btn.go { background: var(--done); border-color: var(--done); color: #fff; }
+  .pad { display: grid; grid-template-columns: repeat(3, 44px); grid-template-rows: repeat(2, 44px); gap: 4px; }
+  .pad button { font: 700 18px var(--body); border-radius: 10px; border: 1.5px solid #8885; background: var(--chip); color: var(--ink); cursor: pointer; }
+  .pad .u { grid-column: 2; } .pad .l { grid-column: 1; grid-row: 2; } .pad .d { grid-column: 2; grid-row: 2; } .pad .r { grid-column: 3; grid-row: 2; }
+  #msg { min-height: 1.5em; margin: 0; }
+  #msg.win { color: var(--done); font-weight: 700; }
+  .hint { margin: 0; color: var(--muted); font-size: 13.5px; }
+  :focus-visible { outline: 2px solid var(--bot); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>Crate Expectations</h1><a href="index.html">&larr; playpen</a></header>
+  <div class="chips" id="chips" role="group" aria-label="Levels"></div>
+  <div class="info"><span class="name" id="lname"></span><span>moves <b id="moves">0</b></span><span>pushes <b id="pushes">0</b></span><span>fewest possible <b id="min">0</b></span><span>your best <b id="best">–</b></span></div>
+  <canvas id="board" aria-label="Warehouse floor. Arrow keys move the robot; walk into a crate to push it."></canvas>
+  <p id="msg" aria-live="polite">Push every crate onto a red marker. You can push but never pull.</p>
+  <div class="row">
+    <div class="btns"><button class="btn" id="undo" type="button">undo (Z)</button><button class="btn" id="reset" type="button">restart (R)</button><button class="btn go" id="next" type="button" hidden>next level</button></div>
+    <div class="pad" aria-label="Move"><button class="u" type="button" data-d="up" aria-label="up">↑</button><button class="l" type="button" data-d="left" aria-label="left">←</button><button class="d" type="button" data-d="down" aria-label="down">↓</button><button class="r" type="button" data-d="right" aria-label="right">→</button></div>
+  </div>
+  <p class="hint">Every level was generated by working backwards from the solved position, so each one is solvable, and "fewest possible" is the true minimum number of pushes. Tap a floor tile to walk there.</p>
+</div>
+<script>
+(() => {
+  const LEVELS = [
+    { name: "Loading Dock", min: 10, map: ["  #####","###   #","#     #","#.$$ ##","#.@#  #","#######"] },
+    { name: "Aisle Two", min: 12, map: ["########","#. .   #","###  # #","#  $@$ #","#   #  #","########"] },
+    { name: "Cold Storage", min: 16, map: ["### ####","# ###  #","#   #$ #","#.   $+#","# #  # #","###   ##","  #####"] },
+    { name: "Back Office", min: 20, map: ["#######","#   # ##","# #  $ #","# # ## #","#. $.  #","# @$. ##","#######"] },
+    { name: "Mezzanine", min: 23, map: ["#########","#.   .  #","#  ### ##","#     # #","#     $@#","#  .#$$ #","#   #   #","#########"] },
+    { name: "Shipping Bay", min: 24, map: ["### #####","# ###  .#","#  # #$ #","# $#    #","#+$     #","#.##    #","#########"] },
+    { name: "Overflow", min: 25, map: ["#######","#   # ###","#$  $   #","#  #   ##","#.$  .  ##","##@      #"," ##   .  #","  ########"] },
+    { name: "Night Shift", min: 27, map: [" ########","##   #  #","#       #","#   # . #","#..#    #","# $@$ $ #","#### #  #","   ######"] },
+    { name: "Inventory Day", min: 29, map: ["##########","#   .  . #","#   .   ##","### $## .#","  ##   # #"," ##  #$$ #"," #     $@#"," ##  # ###","  ######"] },
+    { name: "Peak Season", min: 40, map: ["##########","#  #.    #","# #.#.   #","# .     ##","#   # #$##","# $  $@$ #","## # #   #"," #########"] },
+  ];
+  const DIR = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+  const $ = id => document.getElementById(id);
+  const canvas = $("board"), ctx = canvas.getContext("2d"), dpr = Math.min(2, devicePixelRatio || 1);
+  let li = 0, L, walls, goals, boxes, px, py, w, h, hist = [], moves = 0, pushes = 0, solved = false, face = "down", anim = null;
+  let progress = {}; try { progress = JSON.parse(localStorage.getItem("crates") || "{}"); } catch {}
+
+  function load(i) {
+    li = i; L = LEVELS[i]; h = L.map.length; w = Math.max(...L.map.map(r => r.length));
+    walls = new Set(); goals = new Set(); boxes = new Set();
+    L.map.forEach((row, y) => [...row.padEnd(w)].forEach((c, x) => {
+      const k = y * w + x;
+      if (c === "#") walls.add(k);
+      if (".*+".includes(c)) goals.add(k);
+      if ("$*".includes(c)) boxes.add(k);
+      if ("@+".includes(c)) { px = x; py = y; }
+    }));
+    // the void outside the walls: flood from the player to find the real floor
+    floor = new Set(); const q = [py * w + px]; floor.add(q[0]);
+    for (let k = 0; k < q.length; k++) for (const [dx, dy] of Object.values(DIR)) { const x = q[k] % w + dx, y = (q[k] / w | 0) + dy, j = y * w + x; if (x >= 0 && y >= 0 && x < w && y < h && !walls.has(j) && !floor.has(j)) { floor.add(j); q.push(j); } }
+    hist = []; moves = 0; pushes = 0; solved = false; face = "down";
+    $("next").hidden = true; msg("Push every crate onto a red marker. You can push but never pull.");
+    chips(); size(); hudUpdate();
+  }
+  let floor = new Set();
+  function msg(t, cls = "") { $("msg").textContent = t; $("msg").className = cls; }
+  function hudUpdate() {
+    $("lname").textContent = `${li + 1}. ${L.name}`; $("moves").textContent = moves; $("pushes").textContent = pushes; $("min").textContent = L.min;
+    const b = progress[li]; $("best").textContent = b ? `${b.pushes} pushes` : "–";
+    $("undo").disabled = !hist.length;
+  }
+  function chips() {
+    const box = $("chips"); box.innerHTML = "";
+    LEVELS.forEach((lv, i) => {
+      const b = document.createElement("button"); b.type = "button"; b.textContent = i + 1;
+      b.title = lv.name; if (progress[i]) b.classList.add("solved"); if (i === li) b.setAttribute("aria-current", "true");
+      b.addEventListener("click", () => load(i)); box.appendChild(b);
+    });
+  }
+
+  function step(dir) {
+    if (solved) return false;
+    const [dx, dy] = DIR[dir]; face = dir;
+    const nx = px + dx, ny = py + dy, n = ny * w + nx;
+    if (walls.has(n)) return false;
+    if (boxes.has(n)) {
+      const b2 = (ny + dy) * w + nx + dx;
+      if (walls.has(b2) || boxes.has(b2)) return false;
+      hist.push({ px, py, boxes: new Set(boxes), moves, pushes });
+      boxes.delete(n); boxes.add(b2); pushes++;
+      anim = { box: b2, from: n, t: 0 };
+    } else hist.push({ px, py, boxes: new Set(boxes), moves, pushes });
+    anim = { ...(anim || {}), pfrom: [px, py], t: 0 };
+    px = nx; py = ny; moves++;
+    if ([...goals].every(g => boxes.has(g))) win();
+    hudUpdate(); return true;
+  }
+  function undo() { if (!hist.length) return; const s = hist.pop(); px = s.px; py = s.py; boxes = s.boxes; moves = s.moves; pushes = s.pushes; solved = false; $("next").hidden = true; anim = null; msg("Undone."); hudUpdate(); }
+  function win() {
+    solved = true;
+    const prev = progress[li], better = !prev || pushes < prev.pushes || (pushes === prev.pushes && moves < prev.moves);
+    if (better) { progress[li] = { pushes, moves }; try { localStorage.setItem("crates", JSON.stringify(progress)); } catch {} }
+    msg(pushes === L.min ? `Solved in ${pushes} pushes. That's the minimum possible. Perfect.` : `Solved in ${moves} moves and ${pushes} pushes. The minimum is ${L.min} pushes.`, "win");
+    $("next").hidden = li >= LEVELS.length - 1; chips();
+    if (li >= LEVELS.length - 1 && Object.keys(progress).length >= LEVELS.length) msg(`Every crate in the warehouse is where it belongs. ${pushes} pushes on the final floor.`, "win");
+    if (!$("next").hidden) $("next").focus();
+  }
+  // tap to walk: BFS through floor that has no crates
+  function walkTo(tx, ty) {
+    const start = py * w + px, goal = ty * w + tx;
+    if (!floor.has(goal) || boxes.has(goal) || goal === start) return;
+    const prev = new Map([[start, null]]), q = [start];
+    for (let k = 0; k < q.length && !prev.has(goal); k++) for (const [name, [dx, dy]] of Object.entries(DIR)) {
+      const x = q[k] % w + dx, y = (q[k] / w | 0) + dy, j = y * w + x;
+      if (floor.has(j) && !boxes.has(j) && !prev.has(j)) { prev.set(j, [q[k], name]); q.push(j); }
+    }
+    if (!prev.has(goal)) return;
+    const path = []; for (let c = goal; prev.get(c); c = prev.get(c)[0]) path.unshift(prev.get(c)[1]);
+    let i = 0; const tick = () => { if (i < path.length && step(path[i++])) setTimeout(tick, 55); }; tick();
+  }
+
+  // ----- drawing -----
+  let T = 40;
+  function size() {
+    const maxW = canvas.parentElement.clientWidth, maxH = Math.max(240, innerHeight * 0.55);
+    T = Math.floor(Math.min(64, maxW / w, maxH / h));
+    canvas.style.width = w * T + "px"; canvas.style.height = h * T + "px"; canvas.style.margin = "0 auto";
+    canvas.width = w * T * dpr; canvas.height = h * T * dpr;
+  }
+  addEventListener("resize", size);
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  function rr(x, y, ww, hh, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + ww, y, x + ww, y + hh, r); ctx.arcTo(x + ww, y + hh, x, y + hh, r); ctx.arcTo(x, y + hh, x, y, r); ctx.arcTo(x, y, x + ww, y, r); ctx.closePath(); }
+  function draw(now) {
+    if (anim) anim.t = Math.min(1, anim.t + 0.25);
+    const C = { floor: css("--floor"), floor2: css("--floor2"), wall: css("--wall"), top: css("--wall-top"), crate: css("--crate"), crateDk: css("--crate-dk"), goal: css("--goal"), done: css("--done"), bot: css("--bot") };
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w * T, h * T);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const k = y * w + x, X = x * T, Y = y * T;
+      if (floor.has(k)) { ctx.fillStyle = (x + y) % 2 ? C.floor : C.floor2; ctx.fillRect(X, Y, T, T); }
+      if (walls.has(k)) {
+        ctx.fillStyle = C.wall; rr(X + 1, Y + 1, T - 2, T - 2, T * 0.12); ctx.fill();
+        ctx.fillStyle = C.top; rr(X + 1, Y + 1, T - 2, T * 0.62, T * 0.12); ctx.fill();
+      }
+      if (goals.has(k)) {
+        ctx.strokeStyle = C.goal; ctx.lineWidth = Math.max(2, T * 0.07);
+        ctx.beginPath(); ctx.arc(X + T / 2, Y + T / 2, T * 0.22, 0, 7); ctx.stroke();
+        ctx.fillStyle = C.goal; ctx.beginPath(); ctx.arc(X + T / 2, Y + T / 2, T * 0.07, 0, 7); ctx.fill();
+      }
+    }
+    const lerp = (a, b) => a + (b - a) * (anim ? anim.t : 1);
+    for (const k of boxes) {
+      let x = k % w, y = k / w | 0;
+      if (anim && anim.box === k && anim.t < 1) { x = lerp(anim.from % w, x); y = lerp(anim.from / w | 0, y); }
+      const X = x * T + T * 0.08, Y = y * T + T * 0.08, s = T * 0.84, on = goals.has(k);
+      ctx.fillStyle = on ? C.done : C.crate; rr(X, Y, s, s, T * 0.08); ctx.fill();
+      ctx.strokeStyle = on ? "#00000033" : C.crateDk; ctx.lineWidth = Math.max(2, T * 0.06);
+      rr(X + s * 0.1, Y + s * 0.1, s * 0.8, s * 0.8, T * 0.04); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(X + s * 0.15, Y + s * 0.15); ctx.lineTo(X + s * 0.85, Y + s * 0.85); ctx.moveTo(X + s * 0.85, Y + s * 0.15); ctx.lineTo(X + s * 0.15, Y + s * 0.85); ctx.stroke();
+    }
+    // the robot
+    let rx = px, ry = py;
+    if (anim && anim.pfrom && anim.t < 1) { rx = lerp(anim.pfrom[0], px); ry = lerp(anim.pfrom[1], py); }
+    const cx = rx * T + T / 2, cy = ry * T + T / 2, bob = Math.sin(now / 180) * T * 0.02;
+    ctx.fillStyle = C.bot; rr(cx - T * 0.3, cy - T * 0.26 + bob, T * 0.6, T * 0.5, T * 0.14); ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    const [fx, fy] = DIR[face];
+    for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(cx + s * T * 0.11 + fx * T * 0.06, cy - T * 0.04 + bob + fy * T * 0.04, T * 0.07, 0, 7); ctx.fill(); }
+    ctx.strokeStyle = C.bot; ctx.lineWidth = Math.max(1.5, T * 0.05);
+    ctx.beginPath(); ctx.moveTo(cx, cy - T * 0.26 + bob); ctx.lineTo(cx, cy - T * 0.4 + bob); ctx.stroke();
+    ctx.fillStyle = C.goal; ctx.beginPath(); ctx.arc(cx, cy - T * 0.42 + bob, T * 0.05, 0, 7); ctx.fill();
+    ctx.fillStyle = "#00000044"; ctx.fillRect(cx - T * 0.24, cy + T * 0.26, T * 0.48, T * 0.06);
+    requestAnimationFrame(draw);
+  }
+
+  // ----- input -----
+  const KEYS = { ArrowUp: "up", w: "up", k: "up", ArrowDown: "down", s: "down", j: "down", ArrowLeft: "left", a: "left", h: "left", ArrowRight: "right", d: "right", l: "right" };
+  addEventListener("keydown", e => {
+    if (e.target.closest && e.target.closest("button") && (e.key === "Enter" || e.key === " ")) return;
+    const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (KEYS[k]) { e.preventDefault(); step(KEYS[k]); }
+    else if (k === "z" || k === "u" || (k === "Backspace")) { e.preventDefault(); undo(); }
+    else if (k === "r") load(li);
+    else if ((k === "Enter" || k === "n") && solved && li < LEVELS.length - 1) load(li + 1);
+  });
+  let touch = null;
+  canvas.addEventListener("pointerdown", e => { touch = { x: e.clientX, y: e.clientY }; });
+  canvas.addEventListener("pointerup", e => {
+    if (!touch) return;
+    const dx = e.clientX - touch.x, dy = e.clientY - touch.y; touch = null;
+    if (Math.hypot(dx, dy) > 24) { step(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up")); return; }
+    const r = canvas.getBoundingClientRect(), tx = Math.floor((e.clientX - r.left) / T), ty = Math.floor((e.clientY - r.top) / T);
+    // tapping next to the robot steps (and pushes); further away walks there
+    if (Math.abs(tx - px) + Math.abs(ty - py) === 1) step(tx > px ? "right" : tx < px ? "left" : ty > py ? "down" : "up");
+    else walkTo(tx, ty);
+  });
+  document.querySelectorAll(".pad button").forEach(b => b.addEventListener("click", () => step(b.dataset.d)));
+  $("undo").addEventListener("click", undo);
+  $("reset").addEventListener("click", () => load(li));
+  $("next").addEventListener("click", () => load(li + 1));
+
+  const firstOpen = LEVELS.findIndex((_, i) => !progress[i]);
+  load(firstOpen < 0 ? 0 : firstOpen);
+  requestAnimationFrame(draw);
+  window.__crates = { LEVELS, load, step, get state() { return { li, moves, pushes, solved, px, py, boxes: [...boxes], goals: [...goals], w }; } };
+})();
+</script>
+</body>
+</html>
